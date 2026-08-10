@@ -90,7 +90,7 @@ jobs:
             ls -l /dev/kvm
           fi
 
-      - name: Install, launch and inspect V2 on Android emulator
+      - name: Install, launch and inspect final app on Android emulator
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -101,12 +101,12 @@ jobs:
           script: |
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am force-stop ru.gran.edge2e
-            adb shell am start -n ru.gran.edge2e/.MainActivityV2
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2
             sleep 8
-            adb shell pidof ru.gran.edge2e
-            test -n "$(adb shell pidof ru.gran.edge2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e/.MainActivityV2'
+            adb shell pidof ru.gran.gran2e
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e.MainActivityV2'
             adb shell uiautomator dump /sdcard/window-top.xml
             adb shell cat /sdcard/window-top.xml > window-top.xml
             grep -q 'ГРАНЬ 2e' window-top.xml
