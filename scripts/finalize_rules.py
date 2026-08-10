@@ -10,8 +10,6 @@ CACHE = ROOT / "build" / "pf2e-source"
 ASSETS = ROOT / "app" / "src" / "main" / "assets"
 DB = ASSETS / "rules.db"
 
-# Only traditions that are fixed by the class itself. Classes whose tradition is
-# selected by a subclass/patron/bloodline/eidolon deliberately remain unfiltered.
 FIXED_TRADITIONS = {
     "Animist": ["divine"],
     "Bard": ["occult"],
@@ -44,10 +42,15 @@ def enrich_heritages(db):
             doc = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
+        if not isinstance(doc, dict):
+            continue
         row_id = str(doc.get("_id") or "")
         if not row_id:
             continue
-        ancestry = (doc.get("system") or {}).get("ancestry")
+        system = doc.get("system") or {}
+        if not isinstance(system, dict):
+            continue
+        ancestry = system.get("ancestry")
         ancestry_name = ancestry.get("name", "") if isinstance(ancestry, dict) else ""
         is_versatile = ancestry is None
         def mutate(data):
