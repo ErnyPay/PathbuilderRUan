@@ -7,7 +7,7 @@
         android:theme="@style/AppTheme">
         <activity
             android:name="ru.gran.edge2e.MainActivityV2"
-            android:exported="false"
+            android:exported="true"
             android:screenOrientation="portrait" />
         <activity
             android:name="ru.gran.edge2e.MainActivityV3"
