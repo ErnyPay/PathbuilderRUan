@@ -6,7 +6,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
-            android:name=".MainActivityV2"
+            android:name="ru.gran.edge2e.MainActivityV2"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
