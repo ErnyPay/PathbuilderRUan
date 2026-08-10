@@ -31,19 +31,28 @@ jobs:
       - name: Build local PF2e rules database
         run: python3 scripts/build_rules.py
 
-      - name: Verify rules database
+      - name: Verify rules database and mechanics
         run: |
           test -s app/src/main/assets/rules.db
           python3 - <<'PY'
-          import sqlite3
+          import json, sqlite3
           db = sqlite3.connect('app/src/main/assets/rules.db')
           n = db.execute('select count(*) from rules').fetchone()[0]
-          print('Rules rows:', n)
-          assert n > 1000
-          print('Classes:', db.execute("select count(*) from rules where category='class'").fetchone()[0])
-          print('Feats:', db.execute("select count(*) from rules where category='feat'").fetchone()[0])
-          print('Spells:', db.execute("select count(*) from rules where category='spell'").fetchone()[0])
-          print('Equipment:', db.execute("select count(*) from rules where category='equipment'").fetchone()[0])
+          classes = db.execute("select count(*) from rules where category='class'").fetchone()[0]
+          feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
+          spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
+          equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
+          print('Rules rows:', n, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
+          assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
+          fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
+          assert fighter['meta']['hp'] == 10
+          assert fighter['meta']['attacks']['martial'] >= 1
+          assert fighter['meta']['savingThrows']['fortitude'] >= 1
+          assert len(fighter['meta']['features']) >= 10
+          sword = json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
+          assert sword['meta']['damageDie'] == 'd8' and sword['meta']['damageType'] == 'slashing'
+          force = json.loads(db.execute("select json from rules where category='spell' and name='Force Barrage'").fetchone()[0])
+          assert 'arcane' in force['meta']['traditions'] and force['level'] == 1
           db.close()
           PY
 
@@ -65,7 +74,7 @@ jobs:
             ls -l /dev/kvm
           fi
 
-      - name: Install, launch and inspect on Android emulator
+      - name: Install, launch and inspect V2 on Android emulator
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -77,21 +86,25 @@ jobs:
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop ru.gran.edge2e
-            adb shell am start -n ru.gran.edge2e/.MainActivity
+            adb shell am start -n ru.gran.edge2e/.MainActivityV2
             sleep 8
             adb shell pidof ru.gran.edge2e
             test -n "$(adb shell pidof ru.gran.edge2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep ru.gran.edge2e
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e/.MainActivityV2'
             adb shell uiautomator dump /sdcard/window.xml
             adb shell cat /sdcard/window.xml > window.xml
-            grep -q 'ГРАНЬ 2e' window.xml || (cat window.xml; adb logcat -d -v time | tail -n 300; exit 1)
+            grep -q 'ГРАНЬ 2e' window.xml
+            grep -q 'ПЛАНИРОВЩИК 1–20' window.xml
+            grep -q 'МОДИФИКАТОРЫ ХАРАКТЕРИСТИК' window.xml
+            grep -q 'УРОВЕНЬ 1' window.xml
+            grep -q '17025' window.xml || grep -q 'база 17025' window.xml
             adb exec-out screencap -p > gran2e-screen.png
             test -s gran2e-screen.png
 
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-verified-apk
+          name: Gran2e-V2-verified-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             gran2e-screen.png
