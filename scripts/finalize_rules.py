@@ -108,7 +108,7 @@ def main():
     try:
         heritage_count, versatile_count = enrich_heritages(db)
         class_count = enrich_classes(db)
-        db.execute("PRAGMA user_version=3")
+        db.execute("PRAGMA user_version=4")
         db.commit()
     finally:
         db.close()

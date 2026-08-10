@@ -20,7 +20,7 @@ import java.util.List;
 
 public final class RuleStore extends SQLiteOpenHelper {
     private static final String DB = "rules.db";
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private final Context context;
 
     public RuleStore(Context context) {
@@ -60,8 +60,10 @@ public final class RuleStore extends SQLiteOpenHelper {
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, json TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, group_key TEXT, rarity TEXT, remaster INTEGER NOT NULL DEFAULT 0, source TEXT, json TEXT NOT NULL)");
         db.execSQL("CREATE INDEX idx_rules_category_level ON rules(category, level)");
+        db.execSQL("CREATE INDEX idx_rules_subtype_level ON rules(subtype, level)");
+        db.execSQL("CREATE INDEX idx_rules_group_level ON rules(group_key, level)");
         db.execSQL("CREATE INDEX idx_rules_name ON rules(name COLLATE NOCASE)");
         importSeed(db);
     }
@@ -83,12 +85,17 @@ public final class RuleStore extends SQLiteOpenHelper {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 JSONObject o = new JSONObject(line);
+                JSONObject meta = o.optJSONObject("meta");
                 v.clear();
                 v.put("id", o.optString("id"));
                 v.put("name", o.optString("name"));
                 v.put("category", o.optString("category"));
                 v.put("subtype", o.optString("subtype"));
                 v.put("level", o.optInt("level", 0));
+                v.put("group_key", meta == null ? "" : meta.optString("groupKey", ""));
+                v.put("rarity", meta == null ? "common" : meta.optString("rarity", "common"));
+                v.put("remaster", meta != null && meta.optBoolean("remaster", false) ? 1 : 0);
+                v.put("source", o.optString("source", ""));
                 v.put("json", line);
                 db.insertWithOnConflict("rules", null, v, SQLiteDatabase.CONFLICT_REPLACE);
             }
@@ -101,6 +108,12 @@ public final class RuleStore extends SQLiteOpenHelper {
 
     public int count() {
         try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules", null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        }
+    }
+
+    public int countCategory(String category) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules WHERE category=?", new String[]{category})) {
             return c.moveToFirst() ? c.getInt(0) : 0;
         }
     }
@@ -148,6 +161,24 @@ public final class RuleStore extends SQLiteOpenHelper {
                 if (spellContext && spellTradition != null && !spellHasTradition(item, spellTradition)) continue;
                 out.add(item);
                 if (out.size() >= limit) break;
+            }
+        }
+        return out;
+    }
+
+    public List<RuleItem> queryGroup(String category, String subtype, String groupKey, int maxLevel, String search, int limit) {
+        List<RuleItem> out = new ArrayList<>();
+        StringBuilder where = new StringBuilder("level<=?");
+        List<String> args = new ArrayList<>();
+        args.add(String.valueOf(maxLevel));
+        if (category != null && !category.isEmpty()) { where.append(" AND category=?"); args.add(category); }
+        if (subtype != null && !subtype.isEmpty()) { where.append(" AND subtype=?"); args.add(subtype); }
+        if (groupKey != null && !groupKey.isEmpty()) { where.append(" AND group_key=?"); args.add(groupKey); }
+        if (search != null && !search.trim().isEmpty()) { where.append(" AND name LIKE ? COLLATE NOCASE"); args.add("%" + search.trim() + "%"); }
+        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC, name COLLATE NOCASE ASC", String.valueOf(limit))) {
+            while (c.moveToNext()) {
+                RuleItem item = parse(c.getString(0));
+                if (item != null) out.add(item);
             }
         }
         return out;

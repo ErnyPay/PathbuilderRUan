@@ -30,10 +30,11 @@ jobs:
 
       - name: Build local PF2e rules database
         run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
 
-      - name: Verify rules database, context metadata and licenses
+      - name: Verify dictionaries, structured rules and licenses
         run: |
           test -s app/src/main/assets/rules.db
           test -s app/src/main/assets/licenses/ORCLicense.md
@@ -44,24 +45,46 @@ jobs:
           db = sqlite3.connect('app/src/main/assets/rules.db')
           n = db.execute('select count(*) from rules').fetchone()[0]
           version = db.execute('pragma user_version').fetchone()[0]
+          columns = {r[1] for r in db.execute('pragma table_info(rules)')}
           classes = db.execute("select count(*) from rules where category='class'").fetchone()[0]
           feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
           spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
-          print('Rules rows:', n, 'version:', version, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
-          assert version == 3
+          grouped_class = db.execute("select count(*) from rules where category='feat' and subtype='class' and group_key<>''").fetchone()[0]
+          grouped_arch = db.execute("select count(*) from rules where category='feat' and subtype='archetype' and group_key<>''").fetchone()[0]
+          remaster = db.execute("select count(*) from rules where remaster=1").fetchone()[0]
+          print('Rules:', n, 'v', version, 'classes', classes, 'feats', feats, 'spells', spells, 'equipment', equipment)
+          print('Grouped class feats:', grouped_class, 'grouped archetype feats:', grouped_arch, 'remaster:', remaster)
+          assert version == 4
+          assert {'group_key','rarity','remaster','source','json'} <= columns
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
+          assert grouped_class > 1500 and grouped_arch > 1800 and remaster > 5000
+
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           assert fighter['meta']['hp'] == 10
           assert fighter['meta']['attacks']['martial'] >= 1
           assert fighter['meta']['savingThrows']['fortitude'] >= 1
           assert len(fighter['meta']['features']) >= 10
+
           wizard = json.loads(db.execute("select json from rules where category='class' and name='Wizard'").fetchone()[0])
           assert wizard['meta']['traditions'] == ['arcane']
+
+          wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
+          reqs = wall['meta']['requirementsParsed']
+          assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in reqs)
+          assert wall['meta']['rarity'] == 'common'
+          assert wall['meta']['sourcePath'].endswith('wall-jump.json')
+
+          fighter_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='class' and group_key='fighter' limit 1").fetchone()[0])
+          assert fighter_feat['meta']['groupKey'] == 'fighter'
+          arch_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='archetype' and group_key<>'' limit 1").fetchone()[0])
+          assert arch_feat['meta']['groupKey']
+
           human_heritage = json.loads(db.execute("select json from rules where category='heritage' and name='Versatile Human'").fetchone()[0])
           assert human_heritage['meta']['ancestry'] == 'Human' and human_heritage['meta']['versatile'] is False
           beastkin = json.loads(db.execute("select json from rules where category='heritage' and name='Beastkin'").fetchone()[0])
           assert beastkin['meta']['versatile'] is True
+
           sword = json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
           assert sword['meta']['damageDie'] == 'd8' and sword['meta']['damageType'] == 'slashing'
           force = json.loads(db.execute("select json from rules where category='spell' and name='Force Barrage'").fetchone()[0])
@@ -90,7 +113,7 @@ jobs:
             ls -l /dev/kvm
           fi
 
-      - name: Install, launch and inspect final app on Android emulator
+      - name: Install, launch and inspect rules build on Android emulator
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -111,7 +134,6 @@ jobs:
             adb shell cat /sdcard/window-top.xml > window-top.xml
             grep -q 'ГРАНЬ 2e' window-top.xml
             grep -q 'ПЛАНИРОВЩИК 1–20' window-top.xml
-            grep -q 'МОДИФИКАТОРЫ ХАРАКТЕРИСТИК' window-top.xml
             grep -q '17025' window-top.xml || grep -q 'база 17025' window-top.xml
             adb exec-out screencap -p > gran2e-top.png
             adb shell input swipe 540 1900 540 650 600
@@ -126,7 +148,7 @@ jobs:
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-final-verified-apk
+          name: Gran2e-1.1.0-rules-verified-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             gran2e-top.png

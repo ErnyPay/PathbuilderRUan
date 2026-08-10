@@ -30,6 +30,7 @@ public final class CharacterState {
     public int will = 0;
     public final JSONObject skillRanks = new JSONObject();
     public final JSONObject choices = new JSONObject();
+    public final JSONObject choiceMeta = new JSONObject();
     public final JSONObject conditions = new JSONObject();
     public final JSONArray inventory = new JSONArray();
     public final JSONArray spells = new JSONArray();
@@ -56,6 +57,7 @@ public final class CharacterState {
             s.will = o.optInt("will", 0);
             copyObject(o.optJSONObject("skillRanks"), s.skillRanks);
             copyObject(o.optJSONObject("choices"), s.choices);
+            copyObject(o.optJSONObject("choiceMeta"), s.choiceMeta);
             copyObject(o.optJSONObject("conditions"), s.conditions);
             copyArray(o.optJSONArray("inventory"), s.inventory);
             copyArray(o.optJSONArray("spells"), s.spells);
@@ -87,11 +89,10 @@ public final class CharacterState {
             o.put("will", will);
             o.put("skillRanks", skillRanks);
             o.put("choices", choices);
+            o.put("choiceMeta", choiceMeta);
             o.put("conditions", conditions);
             o.put("inventory", inventory);
             o.put("spells", spells);
-            o.put("statsV2", StatsState.currentJson());
-            o.put("inventoryStateV2", InventoryState.currentJson());
         } catch (JSONException ignored) {
         }
         return o;
@@ -99,8 +100,19 @@ public final class CharacterState {
 
     public void setChoice(String key, RuleItem item) {
         try {
-            if (item == null) choices.remove(key);
-            else choices.put(key, item.id + "\u001f" + item.name);
+            if (item == null) {
+                choices.remove(key);
+                choiceMeta.remove(key);
+            } else {
+                choices.put(key, item.id + "\u001f" + item.name);
+                JSONObject meta = new JSONObject();
+                meta.put("id", item.id);
+                meta.put("name", item.name);
+                meta.put("subtype", item.subtype);
+                meta.put("groupKey", item.meta.optString("groupKey", ""));
+                meta.put("dedication", hasTrait(item, "dedication") || item.name.toLowerCase().endsWith(" dedication"));
+                choiceMeta.put(key, meta);
+            }
         } catch (JSONException ignored) {
         }
     }
@@ -113,15 +125,15 @@ public final class CharacterState {
 
     public Set<String> selectedNames() {
         Set<String> out = new HashSet<>();
+        addName(out, className);
+        addName(out, ancestry);
+        addName(out, background);
         Iterator<String> it = choices.keys();
-        while (it.hasNext()) {
-            String n = choiceName(it.next());
-            if (!n.isEmpty()) out.add(n.toLowerCase());
-        }
+        while (it.hasNext()) addName(out, choiceName(it.next()));
         for (int i = 0; i < inventory.length(); i++) {
             String v = inventory.optString(i, "");
             int split = v.indexOf('\u001f');
-            out.add((split >= 0 ? v.substring(split + 1) : v).toLowerCase());
+            addName(out, split >= 0 ? v.substring(split + 1) : v);
         }
         return out;
     }
@@ -142,6 +154,45 @@ public final class CharacterState {
         return 1;
     }
 
+    public String activeDedicationGroup() {
+        Iterator<String> it = choiceMeta.keys();
+        while (it.hasNext()) {
+            String key = it.next();
+            if (!choices.has(key)) continue;
+            JSONObject meta = choiceMeta.optJSONObject(key);
+            if (meta == null || !meta.optBoolean("dedication", false)) continue;
+            String group = meta.optString("groupKey", "");
+            if (!group.isEmpty()) return group;
+        }
+        return "";
+    }
+
+    public boolean hasDedication(String groupKey) {
+        if (groupKey == null || groupKey.isEmpty()) return false;
+        Iterator<String> it = choiceMeta.keys();
+        while (it.hasNext()) {
+            String key = it.next();
+            if (!choices.has(key)) continue;
+            JSONObject meta = choiceMeta.optJSONObject(key);
+            if (meta != null && meta.optBoolean("dedication", false)
+                    && groupKey.equalsIgnoreCase(meta.optString("groupKey", ""))) return true;
+        }
+        return false;
+    }
+
+    public int countSelectedGroup(String groupKey) {
+        if (groupKey == null || groupKey.isEmpty()) return 0;
+        int count = 0;
+        Iterator<String> it = choiceMeta.keys();
+        while (it.hasNext()) {
+            String key = it.next();
+            if (!choices.has(key)) continue;
+            JSONObject meta = choiceMeta.optJSONObject(key);
+            if (meta != null && groupKey.equalsIgnoreCase(meta.optString("groupKey", ""))) count++;
+        }
+        return count;
+    }
+
     public boolean hasArrayItem(JSONArray array, String id) {
         for (int i = 0; i < array.length(); i++) {
             String v = array.optString(i, "");
@@ -159,6 +210,16 @@ public final class CharacterState {
             }
         }
         array.put(item.id + "\u001f" + item.name);
+    }
+
+    private static void addName(Set<String> out, String value) {
+        if (value != null && !value.trim().isEmpty()) out.add(value.trim().toLowerCase());
+    }
+
+    private static boolean hasTrait(RuleItem item, String trait) {
+        if (item == null) return false;
+        for (String value : item.traits) if (trait.equalsIgnoreCase(value)) return true;
+        return false;
     }
 
     private static int clamp(int value, int min, int max) {

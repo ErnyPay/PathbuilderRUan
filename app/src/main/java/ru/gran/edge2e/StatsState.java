@@ -20,9 +20,14 @@ public final class StatsState {
 
     public StatsState() {
         for (String key : new String[]{"str","dex","con","int","wis","cha"}) setAbility(key, 0);
+        current = this;
     }
 
     public int ability(String key) { return attributes.optInt(key, 0); }
+
+    public static int currentAbility(String key) {
+        return current == null ? 0 : current.ability(key);
+    }
 
     public void setAbility(String key, int value) {
         try { attributes.put(key, Math.max(-5, Math.min(10, value))); }
@@ -31,14 +36,14 @@ public final class StatsState {
 
     public static StatsState load(Context context) {
         String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "");
-        StatsState loaded;
-        if (raw == null || raw.isEmpty()) loaded = new StatsState();
+        StatsState state;
+        if (raw == null || raw.isEmpty()) state = new StatsState();
         else {
-            try { loaded = fromJson(new JSONObject(raw)); }
-            catch (Exception ignored) { loaded = new StatsState(); }
+            try { state = fromJson(new JSONObject(raw)); }
+            catch (Exception ignored) { state = new StatsState(); }
         }
-        current = loaded;
-        return loaded;
+        current = state;
+        return state;
     }
 
     public static StatsState fromJson(JSONObject o) {
@@ -54,28 +59,8 @@ public final class StatsState {
         s.focus = Math.min(s.focus, s.maxFocus);
         s.dying = Math.max(0, Math.min(4, o.optInt("dying", 0)));
         s.wounded = Math.max(0, o.optInt("wounded", 0));
+        current = s;
         return s;
-    }
-
-    public static JSONObject currentJson() {
-        return current == null ? new JSONObject() : current.toJson();
-    }
-
-    public static void restoreCurrent(JSONObject o) {
-        if (o == null) return;
-        StatsState restored = fromJson(o);
-        if (current == null) {
-            current = restored;
-            return;
-        }
-        for (String key : new String[]{"str","dex","con","int","wis","cha"}) current.setAbility(key, restored.ability(key));
-        current.equippedArmorId = restored.equippedArmorId;
-        current.shieldRaised = restored.shieldRaised;
-        current.heroPoints = restored.heroPoints;
-        current.focus = restored.focus;
-        current.maxFocus = restored.maxFocus;
-        current.dying = restored.dying;
-        current.wounded = restored.wounded;
     }
 
     public void save(Context context) {

@@ -17,6 +17,17 @@ PACKS = [
     "feats", "spells", "equipment", "actions", "conditions", "deities"
 ]
 
+RANK_VALUES = {"trained": 1, "expert": 2, "master": 3, "legendary": 4}
+SKILLS = [
+    "acrobatics", "arcana", "athletics", "crafting", "deception", "diplomacy",
+    "intimidation", "medicine", "nature", "occultism", "performance", "religion",
+    "society", "stealth", "survival", "thievery"
+]
+ABILITIES = {
+    "strength": "str", "dexterity": "dex", "constitution": "con",
+    "intelligence": "int", "wisdom": "wis", "charisma": "cha"
+}
+
 
 def run(*args):
     subprocess.run(args, check=True)
@@ -69,6 +80,12 @@ def value(x, default=None):
     return default if x is None else x
 
 
+def slug(text):
+    text = str(text or "").lower().strip()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
 def boosts(raw):
     out = []
     if not isinstance(raw, dict):
@@ -112,6 +129,53 @@ def prereqs(system):
     return out
 
 
+def structured_requirements(items):
+    """Extract only requirements we can prove mechanically at runtime.
+
+    The original text is always kept in `prerequisites`; unrecognised clauses remain
+    conservative in RuleEngine instead of being silently treated as satisfied.
+    """
+    result = []
+    seen = set()
+    for text in items:
+        lower = text.lower().strip()
+
+        for rank_name, rank_value in RANK_VALUES.items():
+            for skill in SKILLS:
+                if re.search(rf"\b{rank_name}\s+(?:in\s+)?{re.escape(skill)}\b", lower):
+                    key = ("skill", skill, rank_value)
+                    if key not in seen:
+                        result.append({"kind": "skill", "skill": skill, "rank": rank_value, "raw": text})
+                        seen.add(key)
+
+        for ability_name, ability_key in ABILITIES.items():
+            match = re.search(rf"\b{ability_name}\b\s*(?:score\s*)?(?:of\s*)?([+\-]?\d+)", lower)
+            if match:
+                raw_value = int(match.group(1))
+                # Remaster prerequisites normally use modifiers (+2); legacy material can use scores (14).
+                fmt = "score" if abs(raw_value) > 5 else "modifier"
+                key = ("ability", ability_key, raw_value, fmt)
+                if key not in seen:
+                    result.append({"kind": "ability", "ability": ability_key, "value": raw_value, "format": fmt, "raw": text})
+                    seen.add(key)
+
+        level_match = re.search(r"\b(?:level|уровень)\s*(\d+)\b", lower)
+        if level_match:
+            required_level = int(level_match.group(1))
+            key = ("level", required_level)
+            if key not in seen:
+                result.append({"kind": "level", "level": required_level, "raw": text})
+                seen.add(key)
+
+        if "spellcasting" in lower or "cast spells" in lower or "cast a spell" in lower:
+            key = ("spellcasting",)
+            if key not in seen:
+                result.append({"kind": "spellcasting", "raw": text})
+                seen.add(key)
+
+    return result
+
+
 def level_of(system):
     return number(system.get("level"), 0)
 
@@ -135,6 +199,12 @@ def category_for(top, rel, doc):
     if top == "equipment":
         return "equipment", str(doc.get("type") or doc.get("system", {}).get("category") or "equipment")
     return mapping.get(top, (top, top))
+
+
+def feat_group(category, subtype, rel):
+    if category != "feat" or subtype not in {"class", "ancestry", "archetype"}:
+        return ""
+    return rel.parts[1] if len(rel.parts) > 2 else ""
 
 
 def mechanic_meta(category, subtype, system):
@@ -173,9 +243,7 @@ def mechanic_meta(category, subtype, system):
             "features": feature_list(system.get("items")),
         })
     elif category == "heritage":
-        meta.update({
-            "ancestry": str(system.get("ancestry") or ""),
-        })
+        meta.update({"ancestry": str(system.get("ancestry") or "")})
     elif category == "equipment":
         damage = system.get("damage") if isinstance(system.get("damage"), dict) else {}
         armor = system.get("acBonus")
@@ -246,6 +314,17 @@ def normalize(top, path):
     if isinstance(description, dict):
         description = description.get("value", "")
     source = publication.get("title") or ((system.get("source") or {}).get("value") if isinstance(system.get("source"), dict) else system.get("source")) or ""
+    prerequisite_text = prereqs(system)
+    meta = mechanic_meta(category, subtype, system)
+    meta.update({
+        "groupKey": feat_group(category, subtype, rel),
+        "rarity": str(traits_object.get("rarity") or "common"),
+        "remaster": bool(publication.get("remaster", False)),
+        "requirementsParsed": structured_requirements(prerequisite_text),
+        "actionType": str(value(system.get("actionType"), "") or ""),
+        "actions": value(system.get("actions"), None),
+        "sourcePath": f"packs/pf2e/{top}/{rel.as_posix()}",
+    })
     return {
         "id": str(doc.get("_id") or f"{top}:{rel.as_posix()}"),
         "name": str(doc.get("name")),
@@ -256,8 +335,8 @@ def normalize(top, path):
         "source": str(source),
         "license": license_name,
         "traits": traits,
-        "prerequisites": prereqs(system),
-        "meta": mechanic_meta(category, subtype, system),
+        "prerequisites": prerequisite_text,
+        "meta": meta,
     }
 
 
@@ -269,15 +348,22 @@ def write_database(rows):
     try:
         db.execute("PRAGMA journal_mode=DELETE")
         db.execute("PRAGMA synchronous=OFF")
-        db.execute("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, json TEXT NOT NULL)")
+        db.execute("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, group_key TEXT, rarity TEXT, remaster INTEGER NOT NULL DEFAULT 0, source TEXT, json TEXT NOT NULL)")
         db.execute("CREATE INDEX idx_rules_category_level ON rules(category, level)")
+        db.execute("CREATE INDEX idx_rules_subtype_level ON rules(subtype, level)")
+        db.execute("CREATE INDEX idx_rules_group_level ON rules(group_key, level)")
         db.execute("CREATE INDEX idx_rules_name ON rules(name COLLATE NOCASE)")
         payload = []
         for row in rows:
             raw = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-            payload.append((row["id"], row["name"], row["category"], row["subtype"], row["level"], raw))
-        db.executemany("INSERT OR REPLACE INTO rules(id,name,category,subtype,level,json) VALUES(?,?,?,?,?,?)", payload)
-        db.execute("PRAGMA user_version=2")
+            meta = row.get("meta") or {}
+            payload.append((
+                row["id"], row["name"], row["category"], row["subtype"], row["level"],
+                meta.get("groupKey", ""), meta.get("rarity", "common"), int(bool(meta.get("remaster"))),
+                row.get("source", ""), raw
+            ))
+        db.executemany("INSERT OR REPLACE INTO rules(id,name,category,subtype,level,group_key,rarity,remaster,source,json) VALUES(?,?,?,?,?,?,?,?,?,?)", payload)
+        db.execute("PRAGMA user_version=4")
         db.commit()
         result = db.execute("SELECT COUNT(*) FROM rules").fetchone()[0]
         if result != len(rows):

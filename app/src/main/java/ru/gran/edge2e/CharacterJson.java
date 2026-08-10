@@ -26,11 +26,10 @@ public final class CharacterJson {
         s.will = o.optInt("will", 0);
         copy(o.optJSONObject("skillRanks"), s.skillRanks);
         copy(o.optJSONObject("choices"), s.choices);
+        copy(o.optJSONObject("choiceMeta"), s.choiceMeta);
         copy(o.optJSONObject("conditions"), s.conditions);
         copy(o.optJSONArray("inventory"), s.inventory);
         copy(o.optJSONArray("spells"), s.spells);
-        StatsState.restoreCurrent(o.optJSONObject("statsV2"));
-        InventoryState.restoreCurrent(o.optJSONObject("inventoryStateV2"));
         return s;
     }
 
