@@ -2,12 +2,14 @@
 import html
 import json
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / "build" / "pf2e-source"
-OUT = ROOT / "app" / "src" / "main" / "assets" / "rules.jsonl"
+ASSETS = ROOT / "app" / "src" / "main" / "assets"
+OUT_DB = ASSETS / "rules.db"
 PACK = CACHE / "packs" / "pf2e"
 
 PACKS = [
@@ -138,6 +140,31 @@ def normalize(top, path):
     }
 
 
+def write_database(rows):
+    ASSETS.mkdir(parents=True, exist_ok=True)
+    if OUT_DB.exists():
+        OUT_DB.unlink()
+    db = sqlite3.connect(OUT_DB)
+    try:
+        db.execute("PRAGMA journal_mode=DELETE")
+        db.execute("PRAGMA synchronous=OFF")
+        db.execute("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, json TEXT NOT NULL)")
+        db.execute("CREATE INDEX idx_rules_category_level ON rules(category, level)")
+        db.execute("CREATE INDEX idx_rules_name ON rules(name COLLATE NOCASE)")
+        payload = []
+        for row in rows:
+            raw = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+            payload.append((row["id"], row["name"], row["category"], row["subtype"], row["level"], raw))
+        db.executemany("INSERT OR REPLACE INTO rules(id,name,category,subtype,level,json) VALUES(?,?,?,?,?,?)", payload)
+        db.execute("PRAGMA user_version=2")
+        db.commit()
+        result = db.execute("SELECT COUNT(*) FROM rules").fetchone()[0]
+        if result != len(rows):
+            raise SystemExit(f"Database count mismatch: {result} vs {len(rows)}")
+    finally:
+        db.close()
+
+
 def main():
     ensure_source()
     rows = []
@@ -153,14 +180,11 @@ def main():
                 key = row["category"] + (":" + row["subtype"] if row["category"] == "feat" else "")
                 counts[key] = counts.get(key, 0) + 1
     rows.sort(key=lambda x: (x["category"], x["subtype"], x["level"], x["name"].lower()))
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(f"Wrote {len(rows)} rules to {OUT}")
-    print(json.dumps(counts, ensure_ascii=False, indent=2, sort_keys=True))
     if len(rows) < 1000:
         raise SystemExit("Rules corpus unexpectedly small")
+    write_database(rows)
+    print(f"Wrote {len(rows)} rules to {OUT_DB} ({OUT_DB.stat().st_size} bytes)")
+    print(json.dumps(counts, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
