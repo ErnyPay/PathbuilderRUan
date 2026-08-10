@@ -1,63 +1,143 @@
 package ru.gran.edge2e;
 
+import android.content.Context;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 
+/** Russian presentation dictionary. English canonical names stay in the rule engine. */
 public final class RuNames {
-    private static final Map<String, String> MAP;
+    private static final Map<String, String> MAP = new HashMap<>();
+    private static final Map<String, String> DESCRIPTIONS = new HashMap<>();
+    private static final Map<String, String> PREREQUISITES = new HashMap<>();
+    private static volatile boolean loaded = false;
+
     static {
-        Map<String, String> m = new HashMap<>();
-        put(m, "Alchemist", "Алхимик"); put(m, "Animist", "Анимист"); put(m, "Barbarian", "Варвар");
-        put(m, "Bard", "Бард"); put(m, "Champion", "Чемпион"); put(m, "Cleric", "Клирик");
-        put(m, "Commander", "Командир"); put(m, "Druid", "Друид"); put(m, "Exemplar", "Экземпляр");
-        put(m, "Fighter", "Воин"); put(m, "Guardian", "Страж"); put(m, "Gunslinger", "Стрелок");
-        put(m, "Inventor", "Изобретатель"); put(m, "Investigator", "Следователь"); put(m, "Kineticist", "Кинетик");
-        put(m, "Magus", "Магус"); put(m, "Monk", "Монах"); put(m, "Oracle", "Оракул");
-        put(m, "Psychic", "Психик"); put(m, "Ranger", "Следопыт"); put(m, "Rogue", "Плут");
-        put(m, "Sorcerer", "Чародей"); put(m, "Summoner", "Призыватель"); put(m, "Swashbuckler", "Сорвиголова");
-        put(m, "Thaumaturge", "Тауматург"); put(m, "Witch", "Ведьма"); put(m, "Wizard", "Волшебник");
-
-        put(m, "Human", "Человек"); put(m, "Dwarf", "Дварф"); put(m, "Elf", "Эльф"); put(m, "Gnome", "Гном");
-        put(m, "Goblin", "Гоблин"); put(m, "Halfling", "Полурослик"); put(m, "Orc", "Орк"); put(m, "Kobold", "Кобольд");
-        put(m, "Leshy", "Леший"); put(m, "Catfolk", "Кошколюд"); put(m, "Tengu", "Тэнгу"); put(m, "Android", "Андроид");
-
-        put(m, "Frightened", "Испуган"); put(m, "Sickened", "Тошнота"); put(m, "Clumsy", "Неуклюж");
-        put(m, "Enfeebled", "Ослаблен"); put(m, "Stupefied", "Одурманен"); put(m, "Slowed", "Замедлен");
-        put(m, "Quickened", "Ускорен"); put(m, "Dying", "При смерти"); put(m, "Wounded", "Ранен");
-        put(m, "Prone", "Лежит"); put(m, "Grabbed", "Схвачен"); put(m, "Restrained", "Обездвижен");
-        put(m, "Off-Guard", "Застигнут врасплох"); put(m, "Concealed", "Скрыт"); put(m, "Hidden", "Спрятан");
-
-        put(m, "Longsword", "Длинный меч"); put(m, "Shortsword", "Короткий меч"); put(m, "Dagger", "Кинжал");
-        put(m, "Greatsword", "Двуручный меч"); put(m, "Longbow", "Длинный лук"); put(m, "Shortbow", "Короткий лук");
-        put(m, "Chain Mail", "Кольчуга"); put(m, "Leather Armor", "Кожаный доспех"); put(m, "Plate Armor", "Латный доспех");
-        put(m, "Shield", "Щит"); put(m, "Healing Potion", "Зелье исцеления");
-
-        put(m, "Force Barrage", "Силовой залп"); put(m, "Electric Arc", "Электрическая дуга");
-        put(m, "Fireball", "Огненный шар"); put(m, "Heal", "Исцеление"); put(m, "Sure Strike", "Верный удар");
-        put(m, "Fear", "Страх"); put(m, "Fly", "Полёт"); put(m, "Invisibility", "Невидимость");
-
-        put(m, "Vicious Swing", "Мощный взмах"); put(m, "Sudden Charge", "Внезапный рывок");
-        put(m, "Toughness", "Стойкость"); put(m, "Battle Medicine", "Боевая медицина");
-        put(m, "Natural Ambition", "Природная амбициозность"); put(m, "Reactive Strike", "Ответный удар");
-        put(m, "Shield Block", "Блок щитом"); put(m, "Weapon Specialization", "Специализация на оружии");
-        MAP = Collections.unmodifiableMap(m);
+        put("Alchemist", "Алхимик"); put("Animist", "Анимист"); put("Barbarian", "Варвар");
+        put("Bard", "Бард"); put("Champion", "Чемпион"); put("Cleric", "Клирик");
+        put("Commander", "Командир"); put("Druid", "Друид"); put("Exemplar", "Экземпляр");
+        put("Fighter", "Воин"); put("Guardian", "Страж"); put("Gunslinger", "Стрелок");
+        put("Inventor", "Изобретатель"); put("Investigator", "Следователь"); put("Kineticist", "Кинетик");
+        put("Magus", "Магус"); put("Monk", "Монах"); put("Oracle", "Оракул");
+        put("Psychic", "Психик"); put("Ranger", "Следопыт"); put("Rogue", "Плут");
+        put("Sorcerer", "Чародей"); put("Summoner", "Призыватель"); put("Swashbuckler", "Сорвиголова");
+        put("Thaumaturge", "Тауматург"); put("Witch", "Ведьма"); put("Wizard", "Волшебник");
+        put("Human", "Человек"); put("Dwarf", "Дварф"); put("Elf", "Эльф"); put("Gnome", "Гном");
+        put("Goblin", "Гоблин"); put("Halfling", "Полурослик"); put("Orc", "Орк"); put("Kobold", "Кобольд");
+        put("Leshy", "Леший"); put("Catfolk", "Кошколюд"); put("Tengu", "Тэнгу"); put("Android", "Андроид");
+        put("Frightened", "Испуган"); put("Sickened", "Тошнота"); put("Clumsy", "Неуклюж");
+        put("Enfeebled", "Ослаблен"); put("Stupefied", "Одурманен"); put("Slowed", "Замедлен");
+        put("Quickened", "Ускорен"); put("Dying", "При смерти"); put("Wounded", "Ранен");
+        put("Prone", "Лежит"); put("Grabbed", "Схвачен"); put("Restrained", "Обездвижен");
+        put("Off-Guard", "Застигнут врасплох"); put("Concealed", "Скрыт"); put("Hidden", "Спрятан");
+        put("Longsword", "Длинный меч"); put("Shortsword", "Короткий меч"); put("Dagger", "Кинжал");
+        put("Greatsword", "Двуручный меч"); put("Longbow", "Длинный лук"); put("Shortbow", "Короткий лук");
+        put("Chain Mail", "Кольчуга"); put("Leather Armor", "Кожаный доспех"); put("Plate Armor", "Латный доспех");
+        put("Shield", "Щит"); put("Healing Potion", "Зелье исцеления");
+        put("Force Barrage", "Силовой залп"); put("Electric Arc", "Электрическая дуга");
+        put("Fireball", "Огненный шар"); put("Heal", "Исцеление"); put("Sure Strike", "Верный удар");
+        put("Fear", "Страх"); put("Fly", "Полёт"); put("Invisibility", "Невидимость");
+        put("Vicious Swing", "Мощный взмах"); put("Sudden Charge", "Внезапный рывок");
+        put("Toughness", "Стойкость"); put("Battle Medicine", "Боевая медицина");
+        put("Natural Ambition", "Природная амбициозность"); put("Reactive Strike", "Ответный удар");
+        put("Shield Block", "Блок щитом"); put("Weapon Specialization", "Специализация на оружии");
     }
 
     private RuNames() { }
-    private static void put(Map<String,String> m, String en, String ru) { m.put(en.toLowerCase(Locale.ROOT), ru); }
+
+    public static synchronized void init(Context context) {
+        if (loaded || context == null) return;
+        loadNames(context, "ru_names.json");
+        loadTexts(context, "ru_text.json");
+        loaded = true;
+    }
+
+    private static void loadNames(Context context, String asset) {
+        try {
+            JSONObject o = new JSONObject(readAsset(context, asset));
+            Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String en = it.next();
+                String ru = o.optString(en, "").trim();
+                if (!ru.isEmpty()) put(en, ru);
+            }
+        } catch (Exception ignored) { }
+    }
+
+    private static void loadTexts(Context context, String asset) {
+        try {
+            JSONObject root = new JSONObject(readAsset(context, asset));
+            Iterator<String> it = root.keys();
+            while (it.hasNext()) {
+                String id = it.next();
+                JSONObject t = root.optJSONObject(id);
+                if (t == null) continue;
+                String name = t.optString("name", "").trim();
+                String english = t.optString("english", "").trim();
+                if (!name.isEmpty() && !english.isEmpty()) put(english, name);
+                String description = t.optString("description", "").trim();
+                if (!description.isEmpty()) DESCRIPTIONS.put(id, description);
+                JSONArray prereqs = t.optJSONArray("prerequisites");
+                if (prereqs != null && prereqs.length() > 0) {
+                    StringBuilder b = new StringBuilder();
+                    for (int i = 0; i < prereqs.length(); i++) {
+                        String v = prereqs.optString(i, "").trim();
+                        if (v.isEmpty()) continue;
+                        if (b.length() > 0) b.append("; ");
+                        b.append(v);
+                    }
+                    if (b.length() > 0) PREREQUISITES.put(id, b.toString());
+                }
+            }
+        } catch (Exception ignored) { }
+    }
+
+    private static String readAsset(Context context, String asset) throws Exception {
+        try (InputStream in = context.getAssets().open(asset); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[16384];
+            int n;
+            while ((n = in.read(buf)) >= 0) out.write(buf, 0, n);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void put(String en, String ru) {
+        if (en == null || ru == null) return;
+        String key = en.trim().toLowerCase(Locale.ROOT);
+        String value = ru.trim();
+        if (!key.isEmpty() && !value.isEmpty()) MAP.put(key, value);
+    }
 
     public static String display(String english) {
         if (english == null) return "";
         String ru = MAP.get(english.toLowerCase(Locale.ROOT));
-        return ru == null ? english : ru + " (" + english + ")";
+        return ru == null || ru.isEmpty() ? english : ru + " (" + english + ")";
     }
 
     public static String shortName(String english) {
         if (english == null) return "";
         String ru = MAP.get(english.toLowerCase(Locale.ROOT));
-        return ru == null ? english : ru;
+        return ru == null || ru.isEmpty() ? english : ru;
+    }
+
+    public static String description(String id, String fallback) {
+        String value = id == null ? null : DESCRIPTIONS.get(id);
+        return value == null || value.isEmpty() ? (fallback == null ? "" : fallback) : value;
+    }
+
+    public static String prerequisites(String id, java.util.List<String> fallback) {
+        String value = id == null ? null : PREREQUISITES.get(id);
+        if (value != null && !value.isEmpty()) return value;
+        return fallback == null || fallback.isEmpty() ? "" : String.join("; ", fallback);
     }
 
     public static boolean matches(String english, String query) {
@@ -67,4 +147,6 @@ public final class RuNames {
         String ru = MAP.getOrDefault(en, "").toLowerCase(Locale.ROOT);
         return en.contains(q) || ru.contains(q);
     }
+
+    public static int dictionarySize() { return MAP.size(); }
 }
