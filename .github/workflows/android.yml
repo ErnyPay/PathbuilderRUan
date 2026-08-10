@@ -74,23 +74,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
-            set -e
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop ru.gran.edge2e
             adb shell am start -n ru.gran.edge2e/.MainActivity
             sleep 8
-            PID=$(adb shell pidof ru.gran.edge2e | tr -d '\r')
-            if [ -z "$PID" ]; then
-              echo 'APP PROCESS IS NOT RUNNING'
-              adb logcat -d -v time | tail -n 500
-              exit 1
-            fi
-            echo "Gran 2e PID: $PID"
+            adb shell pidof ru.gran.edge2e
+            test -n "$(adb shell pidof ru.gran.edge2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep ru.gran.edge2e
             adb shell uiautomator dump /sdcard/window.xml
             adb shell cat /sdcard/window.xml > window.xml
-            grep -q 'ГРАНЬ 2e' window.xml
+            grep -q 'ГРАНЬ 2e' window.xml || (cat window.xml; adb logcat -d -v time | tail -n 300; exit 1)
             adb exec-out screencap -p > gran2e-screen.png
             test -s gran2e-screen.png
 
