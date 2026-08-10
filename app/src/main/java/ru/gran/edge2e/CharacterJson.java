@@ -29,6 +29,8 @@ public final class CharacterJson {
         copy(o.optJSONObject("conditions"), s.conditions);
         copy(o.optJSONArray("inventory"), s.inventory);
         copy(o.optJSONArray("spells"), s.spells);
+        StatsState.restoreCurrent(o.optJSONObject("statsV2"));
+        InventoryState.restoreCurrent(o.optJSONObject("inventoryStateV2"));
         return s;
     }
 
