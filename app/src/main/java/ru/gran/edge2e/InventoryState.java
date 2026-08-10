@@ -7,6 +7,8 @@ import org.json.JSONObject;
 public final class InventoryState {
     private static final String PREFS = "gran2e_inventory_v2";
     private static final String KEY = "inventory";
+    private static InventoryState current;
+
     private final JSONObject quantities = new JSONObject();
     public int pp = 0;
     public int gp = 15;
@@ -15,9 +17,14 @@ public final class InventoryState {
 
     public static InventoryState load(Context context) {
         String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "");
-        if (raw == null || raw.isEmpty()) return new InventoryState();
-        try { return fromJson(new JSONObject(raw)); }
-        catch (Exception ignored) { return new InventoryState(); }
+        InventoryState loaded;
+        if (raw == null || raw.isEmpty()) loaded = new InventoryState();
+        else {
+            try { loaded = fromJson(new JSONObject(raw)); }
+            catch (Exception ignored) { loaded = new InventoryState(); }
+        }
+        current = loaded;
+        return loaded;
     }
 
     public static InventoryState fromJson(JSONObject o) {
@@ -38,6 +45,32 @@ public final class InventoryState {
         return s;
     }
 
+    public static JSONObject currentJson() {
+        return current == null ? new JSONObject() : current.toJson();
+    }
+
+    public static void restoreCurrent(JSONObject o) {
+        if (o == null) return;
+        InventoryState restored = fromJson(o);
+        if (current == null) {
+            current = restored;
+            return;
+        }
+        java.util.Iterator<String> existing = current.quantities.keys();
+        java.util.ArrayList<String> remove = new java.util.ArrayList<>();
+        while (existing.hasNext()) remove.add(existing.next());
+        for (String key : remove) current.quantities.remove(key);
+        java.util.Iterator<String> incoming = restored.quantities.keys();
+        while (incoming.hasNext()) {
+            String key = incoming.next();
+            current.setQuantity(key, restored.quantity(key));
+        }
+        current.pp = restored.pp;
+        current.gp = restored.gp;
+        current.sp = restored.sp;
+        current.cp = restored.cp;
+    }
+
     public int quantity(String id) { return Math.max(0, quantities.optInt(id, 1)); }
 
     public void setQuantity(String id, int value) {
@@ -51,6 +84,7 @@ public final class InventoryState {
     public void remove(String id) { quantities.remove(id); }
 
     public void save(Context context) {
+        current = this;
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, toJson().toString()).apply();
     }
 
