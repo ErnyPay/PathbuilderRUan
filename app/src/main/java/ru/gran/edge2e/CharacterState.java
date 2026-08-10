@@ -90,6 +90,8 @@ public final class CharacterState {
             o.put("conditions", conditions);
             o.put("inventory", inventory);
             o.put("spells", spells);
+            o.put("statsV2", StatsState.currentJson());
+            o.put("inventoryStateV2", InventoryState.currentJson());
         } catch (JSONException ignored) {
         }
         return o;
