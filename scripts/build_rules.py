@@ -54,6 +54,49 @@ def values(x):
     return [str(x)]
 
 
+def number(x, default=0):
+    if isinstance(x, dict) and "value" in x:
+        x = x.get("value")
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+
+def value(x, default=None):
+    if isinstance(x, dict) and "value" in x:
+        return x.get("value", default)
+    return default if x is None else x
+
+
+def boosts(raw):
+    out = []
+    if not isinstance(raw, dict):
+        return out
+    for key in sorted(raw):
+        entry = raw.get(key) or {}
+        vals = values(entry)
+        if vals:
+            out.append(vals)
+    return out
+
+
+def feature_list(raw):
+    if not isinstance(raw, dict):
+        return []
+    out = []
+    for entry in raw.values():
+        if not isinstance(entry, dict) or not entry.get("name"):
+            continue
+        out.append({
+            "name": str(entry.get("name")),
+            "level": number(entry.get("level"), 1),
+            "uuid": str(entry.get("uuid") or ""),
+        })
+    out.sort(key=lambda x: (x["level"], x["name"].lower()))
+    return out
+
+
 def prereqs(system):
     raw = system.get("prerequisites", {})
     raw = raw.get("value", raw) if isinstance(raw, dict) else raw
@@ -70,13 +113,7 @@ def prereqs(system):
 
 
 def level_of(system):
-    value = system.get("level", 0)
-    if isinstance(value, dict):
-        value = value.get("value", 0)
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
+    return number(system.get("level"), 0)
 
 
 def category_for(top, rel, doc):
@@ -100,6 +137,95 @@ def category_for(top, rel, doc):
     return mapping.get(top, (top, top))
 
 
+def mechanic_meta(category, subtype, system):
+    meta = {}
+    if category == "class":
+        for key in ("classFeatLevels", "ancestryFeatLevels", "skillFeatLevels", "generalFeatLevels", "skillIncreaseLevels"):
+            meta[key] = [int(x) for x in values(system.get(key)) if str(x).isdigit()]
+        meta.update({
+            "hp": number(system.get("hp"), 0),
+            "keyAbility": values(system.get("keyAbility")),
+            "attacks": system.get("attacks") or {},
+            "defenses": system.get("defenses") or {},
+            "savingThrows": system.get("savingThrows") or {},
+            "perception": number(system.get("perception"), 0),
+            "spellcasting": number(system.get("spellcasting"), 0),
+            "trainedSkills": system.get("trainedSkills") or {},
+            "features": feature_list(system.get("items")),
+        })
+    elif category == "ancestry":
+        meta.update({
+            "hp": number(system.get("hp"), 0),
+            "speed": number(system.get("speed"), 25),
+            "size": str(value(system.get("size"), "med") or "med"),
+            "boosts": boosts(system.get("boosts")),
+            "flaws": boosts(system.get("flaws")),
+            "languages": values(system.get("languages")),
+            "additionalLanguages": number((system.get("additionalLanguages") or {}).get("count") if isinstance(system.get("additionalLanguages"), dict) else 0, 0),
+            "vision": str(value(system.get("vision"), "normal") or "normal"),
+        })
+    elif category == "background":
+        trained = system.get("trainedSkills") or {}
+        meta.update({
+            "boosts": boosts(system.get("boosts")),
+            "trainedSkills": values(trained.get("value") if isinstance(trained, dict) else []),
+            "lore": values(trained.get("lore") if isinstance(trained, dict) else []),
+            "features": feature_list(system.get("items")),
+        })
+    elif category == "heritage":
+        meta.update({
+            "ancestry": str(system.get("ancestry") or ""),
+        })
+    elif category == "equipment":
+        damage = system.get("damage") if isinstance(system.get("damage"), dict) else {}
+        armor = system.get("acBonus")
+        runes = system.get("runes") if isinstance(system.get("runes"), dict) else {}
+        price = system.get("price") if isinstance(system.get("price"), dict) else {}
+        meta.update({
+            "itemType": subtype,
+            "baseItem": str(system.get("baseItem") or ""),
+            "itemCategory": str(system.get("category") or ""),
+            "group": str(system.get("group") or ""),
+            "damageDice": number(damage.get("dice"), 0),
+            "damageDie": str(damage.get("die") or ""),
+            "damageType": str(damage.get("damageType") or ""),
+            "bonus": number(system.get("bonus"), 0),
+            "bonusDamage": number(system.get("bonusDamage"), 0),
+            "range": value(system.get("range"), None),
+            "reload": str(value(system.get("reload"), "") or ""),
+            "potency": number(runes.get("potency"), 0),
+            "striking": number(runes.get("striking"), 0),
+            "propertyRunes": values(runes.get("property")),
+            "acBonus": number(armor, 0),
+            "dexCap": number(system.get("dexCap"), 99),
+            "checkPenalty": number(system.get("checkPenalty"), 0),
+            "speedPenalty": number(system.get("speedPenalty"), 0),
+            "strength": number(system.get("strength"), 0),
+            "bulk": value(system.get("bulk"), 0),
+            "price": value(price, {}),
+            "usage": str(value(system.get("usage"), "") or ""),
+            "quantity": number(system.get("quantity"), 1),
+            "hardness": number(system.get("hardness"), 0),
+            "hp": system.get("hp") or {},
+            "splashDamage": number(system.get("splashDamage"), 0),
+        })
+    elif category == "spell":
+        traits = system.get("traits") if isinstance(system.get("traits"), dict) else {}
+        meta.update({
+            "traditions": values(traits.get("traditions")),
+            "time": str(value(system.get("time"), "") or ""),
+            "range": str(value(system.get("range"), "") or ""),
+            "target": str(value(system.get("target"), "") or ""),
+            "duration": str(value(system.get("duration"), "") or ""),
+            "area": system.get("area"),
+            "defense": system.get("defense"),
+            "damage": system.get("damage") or {},
+            "requirements": str(system.get("requirements") or ""),
+            "cost": str(value(system.get("cost"), "") or ""),
+        })
+    return meta
+
+
 def normalize(top, path):
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
@@ -114,17 +240,12 @@ def normalize(top, path):
         return None
     rel = path.relative_to(PACK / top)
     category, subtype = category_for(top, rel, doc)
-    traits = values((system.get("traits") or {}).get("value") if isinstance(system.get("traits"), dict) else system.get("traits"))
+    traits_object = system.get("traits") if isinstance(system.get("traits"), dict) else {}
+    traits = values(traits_object.get("value") if traits_object else system.get("traits"))
     description = system.get("description", {})
     if isinstance(description, dict):
         description = description.get("value", "")
     source = publication.get("title") or ((system.get("source") or {}).get("value") if isinstance(system.get("source"), dict) else system.get("source")) or ""
-    meta = {}
-    if category == "class":
-        for key in ("classFeatLevels", "ancestryFeatLevels", "skillFeatLevels", "generalFeatLevels", "skillIncreaseLevels"):
-            meta[key] = [int(x) for x in values(system.get(key)) if str(x).isdigit()]
-        meta["hp"] = int(system.get("hp") or 0)
-        meta["keyAbility"] = values(system.get("keyAbility"))
     return {
         "id": str(doc.get("_id") or f"{top}:{rel.as_posix()}"),
         "name": str(doc.get("name")),
@@ -136,7 +257,7 @@ def normalize(top, path):
         "license": license_name,
         "traits": traits,
         "prerequisites": prereqs(system),
-        "meta": meta,
+        "meta": mechanic_meta(category, subtype, system),
     }
 
 
