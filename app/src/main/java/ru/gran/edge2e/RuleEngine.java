@@ -5,6 +5,7 @@ import org.json.JSONObject;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -29,16 +30,23 @@ public final class RuleEngine {
         return blockReason(item, state, runtime, slotCategory, slotLevel) == null;
     }
 
-    /** Returns null when the choice is legal, otherwise a human-readable reason. */
     public static String blockReason(RuleItem item, CharacterState state, String slotCategory, int slotLevel) {
         return blockReason(item, state, null, slotCategory, slotLevel);
     }
 
-    /** Runtime-aware legality check: automatic class features and executed rule elements count as prerequisites. */
     public static String blockReason(RuleItem item, CharacterState state, RuleRuntime.Snapshot runtime, String slotCategory, int slotLevel) {
         if (item == null) return "Правило не найдено";
         if (item.level > slotLevel) return "Нужен уровень " + item.level;
+        if (item.meta.optBoolean("onlyLevel1", false) && slotLevel != 1) return "Этот фит можно взять только на 1 уровне";
         if (!slotMatches(item, slotCategory)) return "Не подходит для этого типа выбора";
+
+        int maxTakable = maxTakable(item);
+        if (maxTakable > 0) {
+            int already = selectedCount(state, item.id);
+            String currentKey = "L" + slotLevel + ":" + slotCategory;
+            if (item.id.equals(state.choiceId(currentKey))) already = Math.max(0, already - 1);
+            if (already >= maxTakable) return maxTakable == 1 ? "Этот фит уже выбран" : "Достигнут предел: " + maxTakable;
+        }
 
         String group = item.meta.optString("groupKey", "");
         if ("class".equals(slotCategory) && "class".equals(item.subtype) && !state.className.isEmpty()) {
@@ -76,6 +84,21 @@ public final class RuleEngine {
             if (!prerequisiteMet(prereq, state, runtime, selected)) return "Не выполнено: " + prereq;
         }
         return null;
+    }
+
+    private static int maxTakable(RuleItem item) {
+        if (!item.meta.has("maxTakable") || item.meta.isNull("maxTakable")) return 0;
+        Object raw = item.meta.opt("maxTakable");
+        if (raw instanceof Number) return Math.max(0, ((Number) raw).intValue());
+        try { return Math.max(0, Integer.parseInt(String.valueOf(raw))); }
+        catch (Exception ignored) { return 0; }
+    }
+
+    private static int selectedCount(CharacterState state, String id) {
+        int count = 0;
+        Iterator<String> it = state.choices.keys();
+        while (it.hasNext()) if (id.equals(state.choiceId(it.next()))) count++;
+        return count;
     }
 
     private static boolean slotMatches(RuleItem item, String slotCategory) {
@@ -121,32 +144,39 @@ public final class RuleEngine {
         String p = raw.trim();
         if (p.isEmpty()) return true;
         String lower = p.toLowerCase(Locale.ROOT);
+        boolean recognized = false;
 
-        Matcher rank = RANK_IN.matcher(p);
-        boolean sawRank = false;
-        while (rank.find()) {
-            sawRank = true;
-            int required = rankValue(rank.group(1));
-            String skill = normalizeSkill(rank.group(2));
+        Matcher rankMatcher = RANK_IN.matcher(p);
+        while (rankMatcher.find()) {
+            recognized = true;
+            int required = rankValue(rankMatcher.group(1));
+            String skill = normalizeSkill(rankMatcher.group(2));
             if (rank(state, runtime, skill) < required) return false;
         }
-        if (sawRank) return true;
 
-        Matcher level = LEVEL.matcher(p);
-        if (level.find() && state.level < Integer.parseInt(level.group(1))) return false;
-
-        Matcher ability = ABILITY.matcher(p);
-        if (ability.find()) {
-            String key = abilityKey(ability.group(1));
-            int rawValue = Integer.parseInt(ability.group(2));
-            int required = Math.abs(rawValue) > 5 ? Math.floorDiv(rawValue - 10, 2) : rawValue;
-            return StatsState.currentAbility(key) >= required;
+        Matcher levelMatcher = LEVEL.matcher(p);
+        while (levelMatcher.find()) {
+            recognized = true;
+            if (state.level < Integer.parseInt(levelMatcher.group(1))) return false;
         }
 
-        if (lower.startsWith("trained in ")) return rank(state, runtime, normalizeSkill(p.substring(11))) >= 1;
+        Matcher abilityMatcher = ABILITY.matcher(p);
+        while (abilityMatcher.find()) {
+            recognized = true;
+            String key = abilityKey(abilityMatcher.group(1));
+            int rawValue = Integer.parseInt(abilityMatcher.group(2));
+            int required = Math.abs(rawValue) > 5 ? Math.floorDiv(rawValue - 10, 2) : rawValue;
+            if (StatsState.currentAbility(key) < required) return false;
+        }
+
+        if (lower.startsWith("trained in ")) {
+            recognized = true;
+            if (rank(state, runtime, normalizeSkill(p.substring(11))) < 1) return false;
+        }
 
         if (lower.contains("spellcasting") || lower.contains("cast spells") || lower.contains("cast a spell")) {
-            return hasSpellcasting(state, runtime);
+            recognized = true;
+            if (!hasSpellcasting(state, runtime)) return false;
         }
 
         String cleaned = lower.replace("feat", "").replace("the ", "").trim();
@@ -156,11 +186,22 @@ public final class RuleEngine {
 
         if (lower.contains("shield")) {
             for (String selectedName : selected) if (selectedName.contains("shield")) return true;
-            return false;
+            if (isSimpleRecognized(lower)) return false;
         }
 
-        // Unknown prerequisites are deliberately conservative. This is a builder, not a permissive list viewer.
+        if (recognized && isSimpleRecognized(lower)) return true;
         return false;
+    }
+
+    private static boolean isSimpleRecognized(String lower) {
+        String residual = lower;
+        residual = residual.replaceAll("(?i)(trained|expert|master|legendary)\\s+(?:in\\s+)?[a-zA-Z ]+", " ");
+        residual = residual.replaceAll("(?i)(?:level|уровень)\\s*\\d+", " ");
+        residual = residual.replaceAll("(?i)(strength|dexterity|constitution|intelligence|wisdom|charisma)\\s*(?:score\\s*)?(?:of\\s*)?[+\\-]?\\d+", " ");
+        residual = residual.replace("spellcasting", " ").replace("ability to cast spells", " ").replace("cast spells", " ").replace("cast a spell", " ");
+        residual = residual.replaceAll("(?i)\\b(and|or|a|an|the|in|of|at|least|character)\\b", " ");
+        residual = residual.replaceAll("[(),;:+0-9-]", " ").replaceAll("\\s+", " ").trim();
+        return residual.isEmpty();
     }
 
     private static int rank(CharacterState state, RuleRuntime.Snapshot runtime, String skill) {
@@ -191,21 +232,13 @@ public final class RuleEngine {
 
     private static int rankValue(String rank) {
         switch (rank.toLowerCase(Locale.ROOT)) {
-            case "trained": return 1;
-            case "expert": return 2;
-            case "master": return 3;
-            case "legendary": return 4;
-            default: return 0;
+            case "trained": return 1; case "expert": return 2; case "master": return 3; case "legendary": return 4; default: return 0;
         }
     }
 
     private static String rankLabel(int rank) {
         switch (rank) {
-            case 1: return "Обучен";
-            case 2: return "Эксперт";
-            case 3: return "Мастер";
-            case 4: return "Легенда";
-            default: return "Нужный ранг";
+            case 1: return "Обучен"; case 2: return "Эксперт"; case 3: return "Мастер"; case 4: return "Легенда"; default: return "Нужный ранг";
         }
     }
 
@@ -219,19 +252,12 @@ public final class RuleEngine {
 
     private static String abilityKey(String name) {
         switch (name.toLowerCase(Locale.ROOT)) {
-            case "strength": return "str";
-            case "dexterity": return "dex";
-            case "constitution": return "con";
-            case "intelligence": return "int";
-            case "wisdom": return "wis";
-            case "charisma": return "cha";
-            default: return "";
+            case "strength": return "str"; case "dexterity": return "dex"; case "constitution": return "con";
+            case "intelligence": return "int"; case "wisdom": return "wis"; case "charisma": return "cha"; default: return "";
         }
     }
 
-    private static String slug(String s) {
-        return RuleRuntime.slug(s);
-    }
+    private static String slug(String s) { return RuleRuntime.slug(s); }
 
     public static boolean classHasSlot(RuleItem classItem, String key, int level, int[] fallback) {
         if (classItem != null && classItem.meta != null) {

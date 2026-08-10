@@ -30,11 +30,12 @@ jobs:
 
       - name: Build executable PF2e rules database
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
           python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
 
       - name: Verify dictionaries and executable rule elements
         run: |
@@ -51,13 +52,15 @@ jobs:
           feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
           spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
-          keys = collections.Counter()
-          with_runtime = 0
-          ability_choices = 0
+          keys = collections.Counter(); with_runtime = 0; ability_choices = 0; only_l1 = 0; repeatable = 0
           for (raw,) in db.execute('select json from rules'):
-              data = json.loads(raw)
-              elems = data.get('meta', {}).get('ruleElements', [])
+              data = json.loads(raw); meta = data.get('meta', {})
+              elems = meta.get('ruleElements', [])
               if elems: with_runtime += 1
+              if data.get('category') == 'feat':
+                  only_l1 += int(bool(meta.get('onlyLevel1')))
+                  mt = meta.get('maxTakable', 1)
+                  repeatable += int(mt is None or (isinstance(mt, int) and mt > 1))
               for e in elems:
                   if isinstance(e, dict):
                       keys[e.get('key','<unknown>')] += 1
@@ -65,19 +68,17 @@ jobs:
           print('Rules:', n, 'version:', version, 'runtime rows:', with_runtime)
           print('Classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
           print('Rule elements:', keys.most_common(20), 'ability choices:', ability_choices)
+          print('onlyLevel1:', only_l1, 'repeatable:', repeatable)
           assert version == 5
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           assert with_runtime > 2500
-          assert keys['ChoiceSet'] > 1000
-          assert keys['ActiveEffectLike'] > 100
-          assert keys['GrantItem'] > 100
-          assert ability_choices > 1000
+          assert keys['ChoiceSet'] > 1000 and keys['ActiveEffectLike'] > 100 and keys['GrantItem'] > 100
+          assert ability_choices > 1000 and only_l1 > 20 and repeatable > 20
 
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           fkeys = [e.get('key') for e in fighter['meta']['ruleElements']]
           fflags = {e.get('flag') for e in fighter['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
-          assert 'ChoiceSet' in fkeys and 'ActiveEffectLike' in fkeys
-          assert fighter['meta']['features']
+          assert 'ChoiceSet' in fkeys and 'ActiveEffectLike' in fkeys and fighter['meta']['features']
           assert {'granClassKey','granFree1_0','granFree5_0','granFree20_3'} <= fflags
 
           human = json.loads(db.execute("select json from rules where category='ancestry' and name='Human'").fetchone()[0])
