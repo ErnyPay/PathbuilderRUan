@@ -30,10 +30,11 @@ jobs:
 
       - name: Build executable PF2e rules database
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
 
       - name: Verify dictionaries and executable rule elements
         run: |
@@ -52,25 +53,46 @@ jobs:
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
           keys = collections.Counter()
           with_runtime = 0
+          ability_choices = 0
           for (raw,) in db.execute('select json from rules'):
               data = json.loads(raw)
               elems = data.get('meta', {}).get('ruleElements', [])
               if elems: with_runtime += 1
               for e in elems:
-                  if isinstance(e, dict): keys[e.get('key','<unknown>')] += 1
+                  if isinstance(e, dict):
+                      keys[e.get('key','<unknown>')] += 1
+                      ability_choices += int(e.get('_granSynthetic') == 'ability-building')
           print('Rules:', n, 'version:', version, 'runtime rows:', with_runtime)
           print('Classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
-          print('Rule elements:', keys.most_common(20))
+          print('Rule elements:', keys.most_common(20), 'ability choices:', ability_choices)
           assert version == 5
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           assert with_runtime > 2500
-          assert keys['ChoiceSet'] > 100
+          assert keys['ChoiceSet'] > 1000
           assert keys['ActiveEffectLike'] > 100
           assert keys['GrantItem'] > 100
+          assert ability_choices > 1000
+
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           fkeys = [e.get('key') for e in fighter['meta']['ruleElements']]
+          fflags = {e.get('flag') for e in fighter['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
           assert 'ChoiceSet' in fkeys and 'ActiveEffectLike' in fkeys
           assert fighter['meta']['features']
+          assert {'granClassKey','granFree1_0','granFree5_0','granFree20_3'} <= fflags
+
+          human = json.loads(db.execute("select json from rules where category='ancestry' and name='Human'").fetchone()[0])
+          hflags = {e.get('flag') for e in human['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
+          assert {'granAncestryBoost0','granAncestryBoost1'} <= hflags
+
+          acolyte = json.loads(db.execute("select json from rules where category='background' and name='Acolyte'").fetchone()[0])
+          aflags = {e.get('flag') for e in acolyte['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
+          assert {'granBackgroundBoost0','granBackgroundBoost1'} <= aflags
+
+          bard_ded = json.loads(db.execute("select json from rules where category='feat' and name='Bard Dedication'").fetchone()[0])
+          muse = next(e for e in bard_ded['meta']['ruleElements'] if e.get('key') == 'ChoiceSet' and e.get('flag') == 'dedicationMuse')
+          assert isinstance(muse.get('choices'), list) and len(muse['choices']) >= 4
+          assert any(e.get('_granSynthetic') == 'subfeatures.proficiencies' and 'spellcasting' in e.get('path','') for e in bard_ded['meta']['ruleElements'])
+
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
           assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in wall['meta']['requirementsParsed'])
           db.close()

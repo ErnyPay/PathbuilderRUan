@@ -10,6 +10,8 @@ public final class StatsState {
     private static StatsState current;
 
     private final JSONObject attributes = new JSONObject();
+    private final JSONObject abilityScores = new JSONObject();
+    private transient Context attachedContext;
     public String equippedArmorId = "";
     public boolean shieldRaised = false;
     public int heroPoints = 1;
@@ -19,11 +21,15 @@ public final class StatsState {
     public int wounded = 0;
 
     public StatsState() {
-        for (String key : new String[]{"str","dex","con","int","wis","cha"}) setAbility(key, 0);
+        for (String key : new String[]{"str","dex","con","int","wis","cha"}) {
+            setAbility(key, 0);
+            try { abilityScores.put(key, 10); } catch (Exception ignored) { }
+        }
         current = this;
     }
 
     public int ability(String key) { return attributes.optInt(key, 0); }
+    public int abilityScore(String key) { return abilityScores.optInt(key, 10); }
 
     public static int currentAbility(String key) {
         return current == null ? 0 : current.ability(key);
@@ -32,6 +38,14 @@ public final class StatsState {
     public void setAbility(String key, int value) {
         try { attributes.put(key, Math.max(-5, Math.min(10, value))); }
         catch (Exception ignored) { }
+        current = this;
+    }
+
+    public void setAbilityScore(String key, int score) {
+        int clamped = Math.max(1, Math.min(30, score));
+        try { abilityScores.put(key, clamped); }
+        catch (Exception ignored) { }
+        setAbility(key, Math.floorDiv(clamped - 10, 2));
     }
 
     public static StatsState load(Context context) {
@@ -42,6 +56,11 @@ public final class StatsState {
             try { state = fromJson(new JSONObject(raw)); }
             catch (Exception ignored) { state = new StatsState(); }
         }
+        state.attachedContext = context.getApplicationContext();
+        current = state;
+        // BUILD is authoritative: recalculate attributes from ancestry/background/class choices.
+        try { AbilityPlanner.apply(context.getApplicationContext(), CharacterState.load(context), state); }
+        catch (Exception ignored) { }
         current = state;
         return state;
     }
@@ -50,7 +69,11 @@ public final class StatsState {
         StatsState s = new StatsState();
         if (o == null) return s;
         JSONObject a = o.optJSONObject("attributes");
-        if (a != null) for (String k : new String[]{"str","dex","con","int","wis","cha"}) s.setAbility(k, a.optInt(k, 0));
+        JSONObject scores = o.optJSONObject("abilityScores");
+        for (String k : new String[]{"str","dex","con","int","wis","cha"}) {
+            if (scores != null && scores.has(k)) s.setAbilityScore(k, scores.optInt(k, 10));
+            else if (a != null) s.setAbility(k, a.optInt(k, 0));
+        }
         s.equippedArmorId = o.optString("equippedArmorId", "");
         s.shieldRaised = o.optBoolean("shieldRaised", false);
         s.heroPoints = Math.max(0, Math.min(3, o.optInt("heroPoints", 1)));
@@ -64,14 +87,21 @@ public final class StatsState {
     }
 
     public void save(Context context) {
+        attachedContext = context.getApplicationContext();
+        saveAttached();
+    }
+
+    public void saveAttached() {
         current = this;
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, toJson().toString()).apply();
+        if (attachedContext == null) return;
+        attachedContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, toJson().toString()).apply();
     }
 
     public JSONObject toJson() {
         JSONObject o = new JSONObject();
         try {
             o.put("attributes", attributes);
+            o.put("abilityScores", abilityScores);
             o.put("equippedArmorId", equippedArmorId);
             o.put("shieldRaised", shieldRaised);
             o.put("heroPoints", heroPoints);
