@@ -65,6 +65,16 @@ public final class StatsState {
         return state;
     }
 
+    /** Called after any character choice is saved so dependent numbers change immediately. */
+    public static void recalculate(CharacterState character) {
+        if (current == null || current.attachedContext == null || character == null) return;
+        try {
+            AbilityPlanner.apply(current.attachedContext, character, current);
+            RuntimeBridge.invalidate();
+        } catch (Exception ignored) { }
+        current = current;
+    }
+
     public static StatsState fromJson(JSONObject o) {
         StatsState s = new StatsState();
         if (o == null) return s;
