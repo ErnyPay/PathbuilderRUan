@@ -125,12 +125,19 @@ public final class CharacterState {
     }
 
     public int rank(String skill) {
-        return skillRanks.optInt(skill.toLowerCase(), 0);
+        return Math.min(skillRanks.optInt(skill.toLowerCase(), 0), maxSkillRankForLevel());
     }
 
     public void setRank(String skill, int rank) {
-        try { skillRanks.put(skill.toLowerCase(), clamp(rank, 0, 4)); }
+        try { skillRanks.put(skill.toLowerCase(), clamp(rank, 0, maxSkillRankForLevel())); }
         catch (JSONException ignored) { }
+    }
+
+    public int maxSkillRankForLevel() {
+        if (level >= 15) return 4;
+        if (level >= 7) return 3;
+        if (level >= 3) return 2;
+        return 1;
     }
 
     public boolean hasArrayItem(JSONArray array, String id) {
