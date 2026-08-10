@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-and-smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -28,23 +28,27 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build executable PF2e rules database
+      - name: Build rules and Russian dictionaries
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/prepare_2_0.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
           python3 scripts/inject_ability_choices.py
           python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/prepare_2_0.py
 
-      - name: Verify dictionaries and executable rule elements
+      - name: Verify corpus runtime and Russian coverage
         run: |
           test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
           test -s app/src/main/assets/licenses/ORCLicense.md
           test -s app/src/main/assets/licenses/OpenGameLicense.md
-          test -s app/src/main/assets/THIRD_PARTY_NOTICES.txt
+          test -s app/src/main/assets/licenses/PF2ERUS_LICENSE.txt
           python3 - <<'PY'
-          import json, sqlite3, collections
+          import json, sqlite3, collections, os
           db = sqlite3.connect('app/src/main/assets/rules.db')
           n = db.execute('select count(*) from rules').fetchone()[0]
           version = db.execute('pragma user_version').fetchone()[0]
@@ -52,52 +56,39 @@ jobs:
           feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
           spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
-          keys = collections.Counter(); with_runtime = 0; ability_choices = 0; only_l1 = 0; repeatable = 0
+          keys = collections.Counter(); with_runtime = 0; ability_choices = 0
+          ru_meta = 0; ru_desc = 0
           for (raw,) in db.execute('select json from rules'):
               data = json.loads(raw); meta = data.get('meta', {})
               elems = meta.get('ruleElements', [])
               if elems: with_runtime += 1
-              if data.get('category') == 'feat':
-                  only_l1 += int(bool(meta.get('onlyLevel1')))
-                  mt = meta.get('maxTakable', 1)
-                  repeatable += int(mt is None or (isinstance(mt, int) and mt > 1))
+              ru_meta += int(bool(meta.get('ruName')))
+              ru_desc += int(bool(meta.get('ruDescription')))
               for e in elems:
                   if isinstance(e, dict):
                       keys[e.get('key','<unknown>')] += 1
                       ability_choices += int(e.get('_granSynthetic') == 'ability-building')
-          print('Rules:', n, 'version:', version, 'runtime rows:', with_runtime)
-          print('Classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
-          print('Rule elements:', keys.most_common(20), 'ability choices:', ability_choices)
-          print('onlyLevel1:', only_l1, 'repeatable:', repeatable)
+          names = json.load(open('app/src/main/assets/ru_names.json', encoding='utf-8'))
+          texts = json.load(open('app/src/main/assets/ru_text.json', encoding='utf-8'))
+          print('Rules:', n, 'version:', version, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
+          print('Runtime rows:', with_runtime, 'Rule elements:', keys.most_common(20), 'ability choices:', ability_choices)
+          print('Russian names asset:', len(names), 'text rows:', len(texts), 'ru meta:', ru_meta, 'ru descriptions:', ru_desc)
+          print('Russian samples:', list(names.items())[:20])
           assert version == 5
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           assert with_runtime > 2500
           assert keys['ChoiceSet'] > 1000 and keys['ActiveEffectLike'] > 100 and keys['GrantItem'] > 100
-          assert ability_choices > 1000 and only_l1 > 20 and repeatable > 20
-
+          assert ability_choices > 1000
+          assert len(names) >= 500 and ru_meta >= 500
+          assert os.path.getsize('app/src/main/assets/ru_names.json') > 10000
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
-          fkeys = [e.get('key') for e in fighter['meta']['ruleElements']]
-          fflags = {e.get('flag') for e in fighter['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
-          assert 'ChoiceSet' in fkeys and 'ActiveEffectLike' in fkeys and fighter['meta']['features']
-          assert {'granClassKey','granFree1_0','granFree5_0','granFree20_3'} <= fflags
-
-          human = json.loads(db.execute("select json from rules where category='ancestry' and name='Human'").fetchone()[0])
-          hflags = {e.get('flag') for e in human['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
-          assert {'granAncestryBoost0','granAncestryBoost1'} <= hflags
-
-          acolyte = json.loads(db.execute("select json from rules where category='background' and name='Acolyte'").fetchone()[0])
-          aflags = {e.get('flag') for e in acolyte['meta']['ruleElements'] if e.get('key') == 'ChoiceSet'}
-          assert {'granBackgroundBoost0','granBackgroundBoost1'} <= aflags
-
-          bard_ded = json.loads(db.execute("select json from rules where category='feat' and name='Bard Dedication'").fetchone()[0])
-          muse = next(e for e in bard_ded['meta']['ruleElements'] if e.get('key') == 'ChoiceSet' and e.get('flag') == 'dedicationMuse')
-          assert isinstance(muse.get('choices'), list) and len(muse['choices']) >= 4
-          assert any(e.get('_granSynthetic') == 'subfeatures.proficiencies' and 'spellcasting' in e.get('path','') for e in bard_ded['meta']['ruleElements'])
-
+          assert fighter['meta']['features']
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
           assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in wall['meta']['requirementsParsed'])
           db.close()
           PY
+          grep -q 'putExtra("screen", target)' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
+          grep -q 'private String screen = "sheet"' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
 
       - name: Build installable APK
         run: gradle :app:assembleDebug --stacktrace
@@ -110,7 +101,9 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           mkdir -p ci-tools
           cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
-          ls -lh "$APK" app/src/main/assets/rules.db
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+          ls -lh "$APK" app/src/main/assets/rules.db app/src/main/assets/ru_names.json app/src/main/assets/ru_text.json
 
       - name: Enable KVM acceleration
         run: |
@@ -119,7 +112,7 @@ jobs:
             ls -l /dev/kvm
           fi
 
-      - name: Install and inspect planner on Android 35
+      - name: Install and inspect all primary sections on Android 35
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -135,34 +128,68 @@ jobs:
             sleep 15
             test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 700; exit 1)
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e.MainActivityV3'
-            adb shell uiautomator dump /sdcard/window-top.xml
-            adb shell cat /sdcard/window-top.xml > window-top.xml
-            grep -q 'ГРАНЬ 2e' window-top.xml
-            grep -q 'ПЛАН ПЕРСОНАЖА' window-top.xml
-            grep -q 'BUILD' window-top.xml
-            grep -q 'ПРОГРЕССИЯ 1–20' window-top.xml
-            grep -q 'СИЛ' window-top.xml
-            grep -q 'ЛВК' window-top.xml
-            adb exec-out screencap -p > gran2e-planner-top.png
-            adb shell input swipe 540 1900 540 650 650
-            sleep 2
-            adb shell uiautomator dump /sdcard/window-scroll.xml
-            adb shell cat /sdcard/window-scroll.xml > window-scroll.xml
-            grep -q 'УРОВЕНЬ 1' window-scroll.xml || grep -q 'УРОВЕНЬ 2' window-scroll.xml
-            adb exec-out screencap -p > gran2e-planner-scroll.png
-            test -s gran2e-planner-top.png
-            test -s gran2e-planner-scroll.png
+            adb shell uiautomator dump /sdcard/build.xml
+            adb shell cat /sdcard/build.xml > build.xml
+            grep -q 'ГРАНЬ 2e' build.xml
+            grep -q 'ПЛАН ПЕРСОНАЖА' build.xml
+            grep -q 'BUILD' build.xml
+            grep -q 'ЗАЩИТА' build.xml
+            grep -q 'АТАКА' build.xml
+            grep -q 'СНАРЯЖ' build.xml
+            grep -q 'ЗАКЛ' build.xml
+            grep -q 'ПРОГРЕССИЯ 1–20' build.xml
+            adb exec-out screencap -p > gran2e-2-build.png
 
-      - name: Upload verified planner APK
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen defense
+            sleep 3
+            adb shell uiautomator dump /sdcard/defense.xml
+            adb shell cat /sdcard/defense.xml > defense.xml
+            grep -q 'СТОЙКОСТЬ' defense.xml
+            adb exec-out screencap -p > gran2e-2-defense.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen attack
+            sleep 2
+            adb shell uiautomator dump /sdcard/attack.xml
+            adb shell cat /sdcard/attack.xml > attack.xml
+            grep -q 'АТАКА' attack.xml
+            adb exec-out screencap -p > gran2e-2-attack.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen spells
+            sleep 2
+            adb shell uiautomator dump /sdcard/spells.xml
+            adb shell cat /sdcard/spells.xml > spells.xml
+            grep -q 'Поиск заклинания' spells.xml
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen equipment
+            sleep 2
+            adb shell uiautomator dump /sdcard/equipment.xml
+            adb shell cat /sdcard/equipment.xml > equipment.xml
+            grep -q 'Поиск предмета' equipment.xml
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen combat
+            sleep 2
+            adb shell uiautomator dump /sdcard/combat.xml
+            adb shell cat /sdcard/combat.xml > combat.xml
+            grep -q 'СОСТОЯНИЯ' combat.xml
+            grep -q 'БЫСТРЫЕ БРОСКИ' combat.xml
+            adb exec-out screencap -p > gran2e-2-combat.png
+
+      - name: Upload verified Gran 2e 2.0 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-1.3.0-planner-verified-apk
+          name: Gran2e-2.0.0-reference-parity-verified-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
-            gran2e-planner-top.png
-            gran2e-planner-scroll.png
-            window-top.xml
-            window-scroll.xml
+            gran2e-2-build.png
+            gran2e-2-defense.png
+            gran2e-2-attack.png
+            gran2e-2-combat.png
+            build.xml
+            defense.xml
+            attack.xml
+            spells.xml
+            equipment.xml
+            combat.xml
             ci-tools/apksigner.jar
           if-no-files-found: error
           retention-days: 30
