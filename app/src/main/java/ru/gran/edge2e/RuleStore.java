@@ -9,6 +9,8 @@ import android.database.sqlite.SQLiteOpenHelper;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -21,15 +23,36 @@ public final class RuleStore extends SQLiteOpenHelper {
     private final Context context;
 
     public RuleStore(Context context) {
+        this(context.getApplicationContext(), prepareDatabase(context.getApplicationContext()));
+    }
+
+    private RuleStore(Context context, String ignored) {
         super(context, DB, null, VERSION);
-        this.context = context.getApplicationContext();
+        this.context = context;
+    }
+
+    private static String prepareDatabase(Context context) {
+        File target = context.getDatabasePath(DB);
+        if (target.exists() && target.length() > 0) return DB;
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        try (InputStream in = context.getAssets().open("rules.db");
+             FileOutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+            out.getFD().sync();
+        } catch (Exception ignored) {
+            if (target.exists()) target.delete();
+        }
+        return DB;
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, level INTEGER NOT NULL, json TEXT NOT NULL)");
         db.execSQL("CREATE INDEX idx_rules_category_level ON rules(category, level)");
         db.execSQL("CREATE INDEX idx_rules_name ON rules(name COLLATE NOCASE)");
-        importAsset(db);
+        importSeed(db);
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
@@ -37,14 +60,10 @@ public final class RuleStore extends SQLiteOpenHelper {
         onCreate(db);
     }
 
-    private void importAsset(SQLiteDatabase db) {
-        String[] candidates = {"rules.jsonl", "seed_rules.jsonl"};
-        InputStream stream = null;
-        for (String name : candidates) {
-            try { stream = context.getAssets().open(name); break; }
-            catch (Exception ignored) { }
-        }
-        if (stream == null) return;
+    private void importSeed(SQLiteDatabase db) {
+        InputStream stream;
+        try { stream = context.getAssets().open("seed_rules.jsonl"); }
+        catch (Exception e) { return; }
         db.beginTransaction();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
