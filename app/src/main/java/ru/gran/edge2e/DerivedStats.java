@@ -17,7 +17,8 @@ public final class DerivedStats {
         int ancestryHp = ancestry == null ? 0 : ancestry.meta.optInt("hp", 0);
         int classHp = cls == null ? 8 : cls.meta.optInt("hp", 8);
         int total = ancestryHp + (classHp + s.ability("con")) * Math.max(1, c.level);
-        Set<String> selected = c.selectedNames();
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        Set<String> selected = runtime == null ? c.selectedNames() : runtime.allNames();
         for (String name : selected) {
             if (name.equals("toughness") || name.contains("стойкость")) {
                 total += c.level;
@@ -29,13 +30,19 @@ public final class DerivedStats {
 
     public static int save(CharacterState c, StatsState s, RuleItem cls, String save) {
         String ability = "fortitude".equals(save) ? "con" : "reflex".equals(save) ? "dex" : "wis";
-        int rank = classMapRank(cls, "savingThrows", save, 0);
-        return s.ability(ability) + proficiency(rank, c.level);
+        int baseRank = classMapRank(cls, "savingThrows", save, 0);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = runtime == null ? baseRank : runtime.proficiency("save:" + save, baseRank);
+        int modifier = runtime == null ? 0 : runtime.modifier(save);
+        return s.ability(ability) + proficiency(rank, c.level) + modifier;
     }
 
     public static int perception(CharacterState c, StatsState s, RuleItem cls) {
-        int rank = cls == null ? 0 : cls.meta.optInt("perception", 0);
-        return s.ability("wis") + proficiency(rank, c.level);
+        int baseRank = cls == null ? 0 : cls.meta.optInt("perception", 0);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = runtime == null ? baseRank : runtime.proficiency("perception", baseRank);
+        int modifier = runtime == null ? 0 : runtime.modifier("perception");
+        return s.ability("wis") + proficiency(rank, c.level) + modifier;
     }
 
     public static int ac(CharacterState c, StatsState s, RuleItem cls, RuleItem armor) {
@@ -49,10 +56,17 @@ public final class DerivedStats {
             dexCap = armor.meta.optInt("dexCap", 99);
             potency = armor.meta.optInt("potency", 0);
         }
-        int rank = classMapRank(cls, "defenses", category, 0);
+        int baseRank = classMapRank(cls, "defenses", category, 0);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = baseRank;
+        if (runtime != null) {
+            rank = Math.max(rank, runtime.proficiency("defense:" + category, rank));
+            rank = Math.max(rank, runtime.proficiency("proficiency:" + category, rank));
+        }
         int dex = Math.min(s.ability("dex"), dexCap);
         int shield = s.shieldRaised ? 2 : 0;
-        return 10 + dex + proficiency(rank, c.level) + armorBonus + potency + shield;
+        int modifier = runtime == null ? 0 : runtime.modifier("ac");
+        return 10 + dex + proficiency(rank, c.level) + armorBonus + potency + shield + modifier;
     }
 
     public static int speed(StatsState s, RuleItem ancestry, RuleItem armor) {
@@ -67,18 +81,27 @@ public final class DerivedStats {
     }
 
     public static int skill(CharacterState c, StatsState s, String skill) {
-        int rank = c.rank(skill);
-        return abilityForSkill(s, skill) + proficiency(rank, c.level);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = runtime == null ? c.rank(skill) : runtime.rank(c, skill);
+        int modifier = runtime == null ? 0 : runtime.modifier(skill);
+        return abilityForSkill(s, skill) + proficiency(rank, c.level) + modifier;
     }
 
     public static int attack(CharacterState c, StatsState s, RuleItem cls, RuleItem weapon) {
         if (weapon == null) return 0;
         String category = weapon.meta.optString("itemCategory", "simple");
-        int rank = classMapRank(cls, "attacks", category, 0);
+        int baseRank = classMapRank(cls, "attacks", category, 0);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = baseRank;
+        if (runtime != null) {
+            rank = Math.max(rank, runtime.proficiency("attack:" + category, rank));
+            rank = Math.max(rank, runtime.proficiency("proficiency:" + category, rank));
+        }
         boolean ranged = hasRange(weapon);
         int ability = ranged ? s.ability("dex") : s.ability("str");
         if (!ranged && hasTrait(weapon, "finesse")) ability = Math.max(s.ability("str"), s.ability("dex"));
-        return ability + proficiency(rank, c.level) + weapon.meta.optInt("potency", 0) + weapon.meta.optInt("bonus", 0);
+        int modifier = runtime == null ? 0 : runtime.modifier("attack");
+        return ability + proficiency(rank, c.level) + weapon.meta.optInt("potency", 0) + weapon.meta.optInt("bonus", 0) + modifier;
     }
 
     public static String damage(StatsState s, RuleItem weapon) {
@@ -95,12 +118,17 @@ public final class DerivedStats {
     }
 
     public static int spellAttack(CharacterState c, StatsState s, RuleItem cls) {
-        int rank = cls == null ? 0 : cls.meta.optInt("spellcasting", 0);
-        return proficiency(rank, c.level) + keyAbility(s, cls);
+        int baseRank = cls == null ? 0 : cls.meta.optInt("spellcasting", 0);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int rank = runtime == null ? baseRank : runtime.proficiency("spellcasting", baseRank);
+        int modifier = runtime == null ? 0 : runtime.modifier("spell-attack");
+        return proficiency(rank, c.level) + keyAbility(s, cls) + modifier;
     }
 
     public static int spellDc(CharacterState c, StatsState s, RuleItem cls) {
-        return 10 + spellAttack(c, s, cls);
+        RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
+        int dcModifier = runtime == null ? 0 : runtime.modifier("spell-dc");
+        return 10 + spellAttack(c, s, cls) + dcModifier;
     }
 
     public static int keyAbility(StatsState s, RuleItem cls) {

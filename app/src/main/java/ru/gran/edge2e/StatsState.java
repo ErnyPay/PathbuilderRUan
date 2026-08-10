@@ -30,6 +30,7 @@ public final class StatsState {
 
     public int ability(String key) { return attributes.optInt(key, 0); }
     public int abilityScore(String key) { return abilityScores.optInt(key, 10); }
+    public Context context() { return attachedContext; }
 
     public static int currentAbility(String key) {
         return current == null ? 0 : current.ability(key);
@@ -58,7 +59,6 @@ public final class StatsState {
         }
         state.attachedContext = context.getApplicationContext();
         current = state;
-        // BUILD is authoritative: recalculate attributes from ancestry/background/class choices.
         try { AbilityPlanner.apply(context.getApplicationContext(), CharacterState.load(context), state); }
         catch (Exception ignored) { }
         current = state;
