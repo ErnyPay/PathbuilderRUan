@@ -8,7 +8,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
@@ -137,7 +136,36 @@ public final class RuNames {
     public static String prerequisites(String id, java.util.List<String> fallback) {
         String value = id == null ? null : PREREQUISITES.get(id);
         if (value != null && !value.isEmpty()) return value;
-        return fallback == null || fallback.isEmpty() ? "" : String.join("; ", fallback);
+        if (fallback == null || fallback.isEmpty()) return "";
+        StringBuilder out = new StringBuilder();
+        for (String requirement : fallback) {
+            if (out.length() > 0) out.append("; ");
+            out.append(translateRequirement(requirement));
+        }
+        return out.toString();
+    }
+
+    private static String translateRequirement(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "";
+        String exact = MAP.get(raw.trim().toLowerCase(Locale.ROOT));
+        if (exact != null && !exact.isEmpty()) return exact;
+        String s = raw;
+        String[][] terms = {
+                {"legendary", "легендарный"}, {"master", "мастер"}, {"expert", "эксперт"}, {"trained", "обучен"},
+                {"Athletics", "Атлетика"}, {"Acrobatics", "Акробатика"}, {"Arcana", "Аркана"},
+                {"Crafting", "Ремесло"}, {"Deception", "Обман"}, {"Diplomacy", "Дипломатия"},
+                {"Intimidation", "Запугивание"}, {"Medicine", "Медицина"}, {"Nature", "Природа"},
+                {"Occultism", "Оккультизм"}, {"Performance", "Выступление"}, {"Religion", "Религия"},
+                {"Society", "Общество"}, {"Stealth", "Скрытность"}, {"Survival", "Выживание"}, {"Thievery", "Воровство"},
+                {"Strength", "Сила"}, {"Dexterity", "Ловкость"}, {"Constitution", "Телосложение"},
+                {"Intelligence", "Интеллект"}, {"Wisdom", "Мудрость"}, {"Charisma", "Харизма"},
+                {"spellcasting", "умение творить заклинания"}, {"cast spells", "творить заклинания"},
+                {"level", "уровень"}, {"in ", "в "}
+        };
+        for (String[] term : terms) {
+            s = s.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(term[0]) + "\\b", java.util.regex.Matcher.quoteReplacement(term[1]));
+        }
+        return s;
     }
 
     public static boolean matches(String english, String query) {
