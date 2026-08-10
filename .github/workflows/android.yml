@@ -29,26 +29,39 @@ jobs:
           gradle-version: '8.13'
 
       - name: Build local PF2e rules database
-        run: python3 scripts/build_rules.py
+        run: |
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
 
-      - name: Verify rules database and mechanics
+      - name: Verify rules database, context metadata and licenses
         run: |
           test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/licenses/ORCLicense.md
+          test -s app/src/main/assets/licenses/OpenGameLicense.md
+          test -s app/src/main/assets/THIRD_PARTY_NOTICES.txt
           python3 - <<'PY'
           import json, sqlite3
           db = sqlite3.connect('app/src/main/assets/rules.db')
           n = db.execute('select count(*) from rules').fetchone()[0]
+          version = db.execute('pragma user_version').fetchone()[0]
           classes = db.execute("select count(*) from rules where category='class'").fetchone()[0]
           feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
           spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
-          print('Rules rows:', n, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
+          print('Rules rows:', n, 'version:', version, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
+          assert version == 3
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           assert fighter['meta']['hp'] == 10
           assert fighter['meta']['attacks']['martial'] >= 1
           assert fighter['meta']['savingThrows']['fortitude'] >= 1
           assert len(fighter['meta']['features']) >= 10
+          wizard = json.loads(db.execute("select json from rules where category='class' and name='Wizard'").fetchone()[0])
+          assert wizard['meta']['traditions'] == ['arcane']
+          human_heritage = json.loads(db.execute("select json from rules where category='heritage' and name='Versatile Human'").fetchone()[0])
+          assert human_heritage['meta']['ancestry'] == 'Human' and human_heritage['meta']['versatile'] is False
+          beastkin = json.loads(db.execute("select json from rules where category='heritage' and name='Beastkin'").fetchone()[0])
+          assert beastkin['meta']['versatile'] is True
           sword = json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
           assert sword['meta']['damageDie'] == 'd8' and sword['meta']['damageType'] == 'slashing'
           force = json.loads(db.execute("select json from rules where category='spell' and name='Force Barrage'").fetchone()[0])
@@ -113,7 +126,7 @@ jobs:
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-V2-verified-apk
+          name: Gran2e-final-verified-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             gran2e-top.png
