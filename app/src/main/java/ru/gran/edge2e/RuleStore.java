@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -19,7 +20,7 @@ import java.util.List;
 
 public final class RuleStore extends SQLiteOpenHelper {
     private static final String DB = "rules.db";
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
     private final Context context;
 
     public RuleStore(Context context) {
@@ -33,7 +34,17 @@ public final class RuleStore extends SQLiteOpenHelper {
 
     private static String prepareDatabase(Context context) {
         File target = context.getDatabasePath(DB);
-        if (target.exists() && target.length() > 0) return DB;
+        if (target.exists() && target.length() > 0) {
+            SQLiteDatabase existing = null;
+            try {
+                existing = SQLiteDatabase.openDatabase(target.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+                if (existing.getVersion() == VERSION) return DB;
+            } catch (Exception ignored) {
+            } finally {
+                if (existing != null) existing.close();
+            }
+            target.delete();
+        }
         File parent = target.getParentFile();
         if (parent != null && !parent.exists()) parent.mkdirs();
         try (InputStream in = context.getAssets().open("rules.db");
@@ -112,6 +123,12 @@ public final class RuleStore extends SQLiteOpenHelper {
 
     public List<RuleItem> query(String category, int maxLevel, String search, int limit) {
         List<RuleItem> out = new ArrayList<>();
+        CharacterState character = CharacterState.load(context);
+        boolean heritageContext = "heritage".equals(category);
+        boolean spellContext = "spell".equals(category);
+        String spellTradition = fixedTraditionFor(character.className);
+        int rawLimit = (heritageContext || (spellContext && spellTradition != null)) ? Math.max(limit * 6, 1200) : limit;
+
         StringBuilder where = new StringBuilder("level<=?");
         List<String> args = new ArrayList<>();
         args.add(String.valueOf(maxLevel));
@@ -123,13 +140,43 @@ public final class RuleStore extends SQLiteOpenHelper {
             where.append(" AND name LIKE ? COLLATE NOCASE");
             args.add("%" + search.trim() + "%");
         }
-        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC, name COLLATE NOCASE ASC", String.valueOf(limit))) {
+        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC, name COLLATE NOCASE ASC", String.valueOf(rawLimit))) {
             while (c.moveToNext()) {
                 RuleItem item = parse(c.getString(0));
-                if (item != null) out.add(item);
+                if (item == null) continue;
+                if (heritageContext && !heritageAllowed(item, character)) continue;
+                if (spellContext && spellTradition != null && !spellHasTradition(item, spellTradition)) continue;
+                out.add(item);
+                if (out.size() >= limit) break;
             }
         }
         return out;
+    }
+
+    private boolean heritageAllowed(RuleItem item, CharacterState character) {
+        if (character.ancestry == null || character.ancestry.isEmpty()) return false;
+        if (item.meta.optBoolean("versatile", false)) return true;
+        String ancestry = item.meta.optString("ancestry", "");
+        return !ancestry.isEmpty() && ancestry.equalsIgnoreCase(character.ancestry);
+    }
+
+    private boolean spellHasTradition(RuleItem item, String tradition) {
+        JSONArray traditions = item.meta.optJSONArray("traditions");
+        if (traditions == null) return false;
+        for (int i = 0; i < traditions.length(); i++) {
+            if (tradition.equalsIgnoreCase(traditions.optString(i))) return true;
+        }
+        return false;
+    }
+
+    private String fixedTraditionFor(String className) {
+        if (className == null) return null;
+        RuleItem cls = findExact("class", className);
+        if (cls == null) return null;
+        JSONArray traditions = cls.meta.optJSONArray("traditions");
+        if (traditions == null || traditions.length() != 1) return null;
+        String value = traditions.optString(0, "");
+        return value.isEmpty() ? null : value;
     }
 
     public List<RuleItem> bySubtype(String category, String subtype, int maxLevel, String search, int limit) {
