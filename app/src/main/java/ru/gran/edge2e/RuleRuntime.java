@@ -3,10 +3,8 @@ package ru.gran.edge2e;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -21,13 +19,13 @@ import java.util.regex.Pattern;
 /**
  * Character rule graph runtime.
  *
- * The old app filtered a flat list. This runtime instead resolves the character from
- * base choices + automatic class/background features + selected feats and executes a
- * useful subset of PF2e rule elements to a fixed point. The same snapshot is then used
- * by prerequisites, skills and the build UI.
+ * The builder resolves a character from base choices, automatic features, selected
+ * feats and executable PF2e rule elements. The result is a fixed-point snapshot used
+ * by prerequisites, skill ranks, the BUILD screen and future combat calculations.
  */
 public final class RuleRuntime {
-    private static final Pattern INJECT_SELECTION = Pattern.compile("\\{item\\|flags\\.system\\.rulesSelections\\.([^}]+)}");
+    // Android's ICU regex parser requires the closing brace to be escaped explicitly.
+    private static final Pattern INJECT_SELECTION = Pattern.compile("\\{item\\|flags\\.system\\.rulesSelections\\.([^}]+)\\}");
     private static final List<String> SKILLS = Arrays.asList(
             "acrobatics", "arcana", "athletics", "crafting", "deception", "diplomacy",
             "intimidation", "medicine", "nature", "occultism", "performance", "religion",
@@ -118,7 +116,6 @@ public final class RuleRuntime {
         String heritageId = state.choiceId("base:heritage");
         if (!heritageId.isEmpty()) addItem(out, store.findById(heritageId), false, 1);
 
-        // Explicit planner choices.
         Iterator<String> choiceKeys = state.choices.keys();
         while (choiceKeys.hasNext()) {
             String key = choiceKeys.next();
@@ -126,7 +123,6 @@ public final class RuleRuntime {
             if (!id.isEmpty()) addItem(out, store.findById(id), false, levelFromKey(key));
         }
 
-        // Base trained skills and proficiency ranks are data, not user guesses.
         if (background != null) applyTrainedSkills(out, background.meta.optJSONArray("trainedSkills"));
         if (cls != null) {
             JSONObject trained = cls.meta.optJSONObject("trainedSkills");
@@ -137,7 +133,6 @@ public final class RuleRuntime {
         }
         if (background != null) addFeatureList(store, out, background.meta.optJSONArray("features"), state.level);
 
-        // Resolve rule elements repeatedly: a GrantItem can itself add RollOptions, choices and grants.
         Set<String> appliedGrantRules = new HashSet<>();
         for (int pass = 0; pass < 8; pass++) {
             int beforeItems = out.items.size();
@@ -237,9 +232,7 @@ public final class RuleRuntime {
         copyRankMap(out, "save:", cls.meta.optJSONObject("savingThrows"));
         out.proficiencyRanks.put("perception", cls.meta.optInt("perception", 0));
         out.proficiencyRanks.put("spellcasting", cls.meta.optInt("spellcasting", 0));
-        if (cls.meta.optInt("spellcasting", 0) > 0 || cls.meta.optJSONArray("traditions") != null) {
-            out.rollOptions.add("self:spellcasting");
-        }
+        if (cls.meta.optInt("spellcasting", 0) > 0 || cls.meta.optJSONArray("traditions") != null) out.rollOptions.add("self:spellcasting");
     }
 
     private static void copyRankMap(Snapshot out, String prefix, JSONObject map) {
@@ -264,12 +257,8 @@ public final class RuleRuntime {
             if (!predicateMatches(rule.opt("predicate"), item, state, out)) continue;
             String key = rule.optString("key", "");
             switch (key) {
-                case "ChoiceSet":
-                    applyChoiceSet(state, out, item, rule, i);
-                    break;
-                case "ActiveEffectLike":
-                    applyActiveEffectLike(state, out, item, rule);
-                    break;
+                case "ChoiceSet": applyChoiceSet(state, out, item, rule, i); break;
+                case "ActiveEffectLike": applyActiveEffectLike(state, out, item, rule); break;
                 case "GrantItem":
                     String grantKey = item.id + "#" + i;
                     if (!appliedGrantRules.contains(grantKey)) {
@@ -278,22 +267,15 @@ public final class RuleRuntime {
                         if (granted != null) {
                             addItem(out, granted, true, Math.max(1, item.level));
                             appliedGrantRules.add(grantKey);
-                        } else if (!uuid.isEmpty()) {
-                            addWarning(out, "Не найден GrantItem: " + uuid);
-                        }
+                        } else if (!uuid.isEmpty()) addWarning(out, "Не найден GrantItem: " + uuid);
                     }
                     break;
                 case "RollOption":
                     String option = resolveInjected(rule.optString("option", rule.optString("value", "")), item, state);
                     if (!option.isEmpty()) out.rollOptions.add(option);
                     break;
-                case "FlatModifier":
-                    applyFlatModifier(state, out, item, rule, i);
-                    break;
-                default:
-                    // Unsupported combat-time effects are preserved in the dictionary and can be
-                    // added incrementally. Build legality never assumes they succeeded.
-                    break;
+                case "FlatModifier": applyFlatModifier(state, out, item, rule, i); break;
+                default: break;
             }
         }
     }
@@ -324,9 +306,7 @@ public final class RuleRuntime {
                     if (value == null || JSONObject.NULL.equals(value)) continue;
                     String label = choice.optString("label", String.valueOf(value));
                     options.add(new Option(label, String.valueOf(value)));
-                } else if (raw != null && !JSONObject.NULL.equals(raw)) {
-                    options.add(new Option(String.valueOf(raw), String.valueOf(raw)));
-                }
+                } else if (raw != null && !JSONObject.NULL.equals(raw)) options.add(new Option(String.valueOf(raw), String.valueOf(raw)));
             }
         }
         String promptText = rule.optString("prompt", "Дополнительный выбор: " + item.name);
@@ -340,22 +320,18 @@ public final class RuleRuntime {
         String mode = rule.optString("mode", "upgrade");
         if (path.startsWith("system.skills.") && path.endsWith(".rank")) {
             String skill = path.substring("system.skills.".length(), path.length() - ".rank".length());
-            setRank(out.skillRanks, slug(skill), value, mode);
-            return;
+            setRank(out.skillRanks, slug(skill), value, mode); return;
         }
         if (path.startsWith("system.saves.") && path.endsWith(".rank")) {
             String save = path.substring("system.saves.".length(), path.length() - ".rank".length());
-            setRank(out.proficiencyRanks, "save:" + slug(save), value, mode);
-            return;
+            setRank(out.proficiencyRanks, "save:" + slug(save), value, mode); return;
         }
         if ("system.attributes.perception.rank".equals(path) || "system.perception.rank".equals(path)) {
-            setRank(out.proficiencyRanks, "perception", value, mode);
-            return;
+            setRank(out.proficiencyRanks, "perception", value, mode); return;
         }
         if (path.contains("spellcasting") && path.endsWith(".rank")) {
             setRank(out.proficiencyRanks, "spellcasting", value, mode);
-            if (value > 0) out.rollOptions.add("self:spellcasting");
-            return;
+            if (value > 0) out.rollOptions.add("self:spellcasting"); return;
         }
         if (path.contains("proficiencies") && path.endsWith(".rank")) {
             String[] parts = path.split("\\.");
@@ -409,7 +385,6 @@ public final class RuleRuntime {
                 }
                 return !predicateMatches(raw, item, state, out);
             }
-            // Numeric actor-level comparisons used by many rule elements.
             for (String op : new String[]{"gte", "gt", "lte", "lt", "eq"}) {
                 if (!o.has(op)) continue;
                 Object raw = o.opt(op);
@@ -440,16 +415,14 @@ public final class RuleRuntime {
 
     private static String resolveInjected(String raw, RuleItem item, CharacterState state) {
         if (raw == null) return "";
-        String result = raw;
-        Matcher m = INJECT_SELECTION.matcher(result);
+        Matcher m = INJECT_SELECTION.matcher(raw);
         StringBuffer b = new StringBuffer();
         while (m.find()) {
-            String flag = m.group(1);
-            String selection = state.ruleSelection(item.id, flag);
+            String selection = state.ruleSelection(item.id, m.group(1));
             m.appendReplacement(b, Matcher.quoteReplacement(selection));
         }
         m.appendTail(b);
-        result = b.toString();
+        String result = b.toString();
         result = result.replace("@item.level", String.valueOf(item.level));
         result = result.replace("@actor.level", String.valueOf(state.level));
         return result;
@@ -470,17 +443,12 @@ public final class RuleRuntime {
         int next;
         if ("override".equalsIgnoreCase(mode)) next = value;
         else if ("add".equalsIgnoreCase(mode)) next = current + value;
-        else next = Math.max(current, value); // upgrade is the PF2e default for proficiency ranks
+        else next = Math.max(current, value);
         if (next != current) map.put(key, next);
     }
 
-    private static void upgrade(Map<String, Integer> map, String key, int value) {
-        setRank(map, key, value, "upgrade");
-    }
-
-    private static int hashRanks(Snapshot out) {
-        return out.skillRanks.hashCode() * 31 + out.proficiencyRanks.hashCode();
-    }
+    private static void upgrade(Map<String, Integer> map, String key, int value) { setRank(map, key, value, "upgrade"); }
+    private static int hashRanks(Snapshot out) { return out.skillRanks.hashCode() * 31 + out.proficiencyRanks.hashCode(); }
 
     private static int levelFromKey(String key) {
         if (key == null || !key.startsWith("L")) return 1;
