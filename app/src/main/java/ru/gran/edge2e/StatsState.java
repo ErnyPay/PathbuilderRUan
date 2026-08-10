@@ -7,6 +7,7 @@ import org.json.JSONObject;
 public final class StatsState {
     private static final String PREFS = "gran2e_stats_v2";
     private static final String KEY = "stats";
+    private static StatsState current;
 
     private final JSONObject attributes = new JSONObject();
     public String equippedArmorId = "";
@@ -30,9 +31,14 @@ public final class StatsState {
 
     public static StatsState load(Context context) {
         String raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "");
-        if (raw == null || raw.isEmpty()) return new StatsState();
-        try { return fromJson(new JSONObject(raw)); }
-        catch (Exception ignored) { return new StatsState(); }
+        StatsState loaded;
+        if (raw == null || raw.isEmpty()) loaded = new StatsState();
+        else {
+            try { loaded = fromJson(new JSONObject(raw)); }
+            catch (Exception ignored) { loaded = new StatsState(); }
+        }
+        current = loaded;
+        return loaded;
     }
 
     public static StatsState fromJson(JSONObject o) {
@@ -51,7 +57,29 @@ public final class StatsState {
         return s;
     }
 
+    public static JSONObject currentJson() {
+        return current == null ? new JSONObject() : current.toJson();
+    }
+
+    public static void restoreCurrent(JSONObject o) {
+        if (o == null) return;
+        StatsState restored = fromJson(o);
+        if (current == null) {
+            current = restored;
+            return;
+        }
+        for (String key : new String[]{"str","dex","con","int","wis","cha"}) current.setAbility(key, restored.ability(key));
+        current.equippedArmorId = restored.equippedArmorId;
+        current.shieldRaised = restored.shieldRaised;
+        current.heroPoints = restored.heroPoints;
+        current.focus = restored.focus;
+        current.maxFocus = restored.maxFocus;
+        current.dying = restored.dying;
+        current.wounded = restored.wounded;
+    }
+
     public void save(Context context) {
+        current = this;
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, toJson().toString()).apply();
     }
 
