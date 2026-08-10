@@ -109,8 +109,15 @@ def patch_v2():
         nav.addView(v, wrapWrap(dp(4)));
     }'''
     s = must_replace(s, old_method, new_method, 'V2 addNav')
+
+    # All user-facing details use the mass PF2ERUS dictionary. The canonical English
+    # strings remain in RuleItem for identifiers, requirements and search fallbacks.
     s = s.replace('String.join("; ", item.prerequisites)', 'RuNames.prerequisites(item.id, item.prerequisites)')
     s = s.replace('item.description == null ? "" : item.description', 'RuNames.description(item.id, item.description)')
+    s = s.replace('item.description.isEmpty() ? "Описание отсутствует." : item.description',
+                  'RuNames.description(item.id, item.description).isEmpty() ? "Описание отсутствует." : RuNames.description(item.id, item.description)')
+    s = s.replace('body.append(item.description);', 'body.append(RuNames.description(item.id, item.description));')
+    s = s.replace('body.append("\\n\\n").append(item.description);', 'body.append("\\n\\n").append(RuNames.description(item.id, item.description));')
     V2.write_text(s, encoding='utf-8')
 
 
