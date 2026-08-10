@@ -20,7 +20,7 @@ import java.util.List;
 
 public final class RuleStore extends SQLiteOpenHelper {
     private static final String DB = "rules.db";
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
     private final Context context;
 
     public RuleStore(Context context) {
@@ -129,6 +129,35 @@ public final class RuleStore extends SQLiteOpenHelper {
     public RuleItem findExact(String category, String name) {
         if (name == null || name.isEmpty()) return null;
         try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, "category=? AND name=? COLLATE NOCASE", new String[]{category, name}, null, null, null, "1")) {
+            if (c.moveToFirst()) return parse(c.getString(0));
+        }
+        return null;
+    }
+
+    /** Finds a named rules object when a GrantItem UUID does not carry a usable local id. */
+    public RuleItem findAnyExact(String name) {
+        if (name == null || name.isEmpty()) return null;
+        String order = "CASE category WHEN 'class-feature' THEN 0 WHEN 'feat' THEN 1 WHEN 'action' THEN 2 WHEN 'spell' THEN 3 WHEN 'condition' THEN 4 ELSE 5 END, level ASC";
+        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, "name=? COLLATE NOCASE", new String[]{name}, null, null, order, "1")) {
+            if (c.moveToFirst()) return parse(c.getString(0));
+        }
+        return null;
+    }
+
+    /** Resolve common Foundry UUID forms used by GrantItem and class/background feature lists. */
+    public RuleItem findFromUuid(String uuid) {
+        if (uuid == null || uuid.isEmpty()) return null;
+        String value = uuid.trim();
+        int marker = value.lastIndexOf(".Item.");
+        String token = marker >= 0 ? value.substring(marker + 6) : value;
+        token = token.replace("%20", " ");
+        RuleItem byId = findById(token);
+        if (byId != null) return byId;
+        RuleItem byName = findAnyExact(token);
+        if (byName != null) return byName;
+        // A small number of source UUIDs end with a slug rather than an id/name.
+        String wanted = token.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT json FROM rules WHERE lower(replace(name,' ','-'))=? LIMIT 1", new String[]{wanted})) {
             if (c.moveToFirst()) return parse(c.getString(0));
         }
         return null;

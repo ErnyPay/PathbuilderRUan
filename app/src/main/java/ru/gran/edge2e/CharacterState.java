@@ -31,6 +31,8 @@ public final class CharacterState {
     public final JSONObject skillRanks = new JSONObject();
     public final JSONObject choices = new JSONObject();
     public final JSONObject choiceMeta = new JSONObject();
+    /** Selections created by PF2e ChoiceSet rule elements: sourceId:flag -> selected value. */
+    public final JSONObject ruleSelections = new JSONObject();
     public final JSONObject conditions = new JSONObject();
     public final JSONArray inventory = new JSONArray();
     public final JSONArray spells = new JSONArray();
@@ -58,6 +60,7 @@ public final class CharacterState {
             copyObject(o.optJSONObject("skillRanks"), s.skillRanks);
             copyObject(o.optJSONObject("choices"), s.choices);
             copyObject(o.optJSONObject("choiceMeta"), s.choiceMeta);
+            copyObject(o.optJSONObject("ruleSelections"), s.ruleSelections);
             copyObject(o.optJSONObject("conditions"), s.conditions);
             copyArray(o.optJSONArray("inventory"), s.inventory);
             copyArray(o.optJSONArray("spells"), s.spells);
@@ -90,6 +93,7 @@ public final class CharacterState {
             o.put("skillRanks", skillRanks);
             o.put("choices", choices);
             o.put("choiceMeta", choiceMeta);
+            o.put("ruleSelections", ruleSelections);
             o.put("conditions", conditions);
             o.put("inventory", inventory);
             o.put("spells", spells);
@@ -123,6 +127,22 @@ public final class CharacterState {
         return split >= 0 ? v.substring(split + 1) : v;
     }
 
+    public String choiceId(String key) {
+        String v = choices.optString(key, "");
+        int split = v.indexOf('\u001f');
+        return split >= 0 ? v.substring(0, split) : v;
+    }
+
+    public Set<String> selectedIds() {
+        Set<String> out = new HashSet<>();
+        Iterator<String> it = choices.keys();
+        while (it.hasNext()) {
+            String id = choiceId(it.next());
+            if (!id.isEmpty()) out.add(id);
+        }
+        return out;
+    }
+
     public Set<String> selectedNames() {
         Set<String> out = new HashSet<>();
         addName(out, className);
@@ -136,6 +156,33 @@ public final class CharacterState {
             addName(out, split >= 0 ? v.substring(split + 1) : v);
         }
         return out;
+    }
+
+    public String ruleSelection(String sourceId, String flag) {
+        return ruleSelections.optString(selectionKey(sourceId, flag), "");
+    }
+
+    public void setRuleSelection(String sourceId, String flag, Object value) {
+        String key = selectionKey(sourceId, flag);
+        try {
+            if (value == null || String.valueOf(value).isEmpty()) ruleSelections.remove(key);
+            else ruleSelections.put(key, value);
+        } catch (JSONException ignored) { }
+    }
+
+    public void clearRuleSelectionsFor(String sourceId) {
+        String prefix = sourceId + ":";
+        Set<String> remove = new HashSet<>();
+        Iterator<String> it = ruleSelections.keys();
+        while (it.hasNext()) {
+            String key = it.next();
+            if (key.startsWith(prefix)) remove.add(key);
+        }
+        for (String key : remove) ruleSelections.remove(key);
+    }
+
+    private static String selectionKey(String sourceId, String flag) {
+        return (sourceId == null ? "" : sourceId) + ":" + (flag == null ? "" : flag);
     }
 
     public int rank(String skill) {

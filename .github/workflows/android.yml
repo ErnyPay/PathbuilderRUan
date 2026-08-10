@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-and-smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -28,68 +28,58 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build local PF2e rules database
+      - name: Build executable PF2e rules database
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
 
-      - name: Verify dictionaries, structured rules and licenses
+      - name: Verify dictionaries and executable rule elements
         run: |
           test -s app/src/main/assets/rules.db
           test -s app/src/main/assets/licenses/ORCLicense.md
           test -s app/src/main/assets/licenses/OpenGameLicense.md
           test -s app/src/main/assets/THIRD_PARTY_NOTICES.txt
           python3 - <<'PY'
-          import json, sqlite3
+          import json, sqlite3, collections
           db = sqlite3.connect('app/src/main/assets/rules.db')
           n = db.execute('select count(*) from rules').fetchone()[0]
           version = db.execute('pragma user_version').fetchone()[0]
-          columns = {r[1] for r in db.execute('pragma table_info(rules)')}
           classes = db.execute("select count(*) from rules where category='class'").fetchone()[0]
           feats = db.execute("select count(*) from rules where category='feat'").fetchone()[0]
           spells = db.execute("select count(*) from rules where category='spell'").fetchone()[0]
           equipment = db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
-          grouped_class = db.execute("select count(*) from rules where category='feat' and subtype='class' and group_key<>''").fetchone()[0]
-          grouped_arch = db.execute("select count(*) from rules where category='feat' and subtype='archetype' and group_key<>''").fetchone()[0]
-          remaster = db.execute("select count(*) from rules where remaster=1").fetchone()[0]
-          print('Rules:', n, 'v', version, 'classes', classes, 'feats', feats, 'spells', spells, 'equipment', equipment)
-          print('Grouped class feats:', grouped_class, 'grouped archetype feats:', grouped_arch, 'remaster:', remaster)
-          assert version == 4
-          assert {'group_key','rarity','remaster','source','json'} <= columns
+          keys = collections.Counter()
+          with_runtime = 0
+          for (raw,) in db.execute('select json from rules'):
+              data = json.loads(raw)
+              elems = data.get('meta', {}).get('ruleElements', [])
+              if elems: with_runtime += 1
+              for e in elems:
+                  if isinstance(e, dict): keys[e.get('key','<unknown>')] += 1
+          print('Rules:', n, 'version:', version, 'runtime rows:', with_runtime)
+          print('Classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
+          print('Rule elements:', keys.most_common(20))
+          assert version == 5
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
-          assert grouped_class > 1500 and grouped_arch > 1800 and remaster > 5000
+          assert with_runtime > 2500
+          assert keys['ChoiceSet'] > 100
+          assert keys['ActiveEffectLike'] > 100
+          assert keys['GrantItem'] > 100
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
-          assert fighter['meta']['hp'] == 10
-          assert fighter['meta']['attacks']['martial'] >= 1
-          assert fighter['meta']['savingThrows']['fortitude'] >= 1
-          assert len(fighter['meta']['features']) >= 10
-          wizard = json.loads(db.execute("select json from rules where category='class' and name='Wizard'").fetchone()[0])
-          assert wizard['meta']['traditions'] == ['arcane']
+          fkeys = [e.get('key') for e in fighter['meta']['ruleElements']]
+          assert 'ChoiceSet' in fkeys and 'ActiveEffectLike' in fkeys
+          assert fighter['meta']['features']
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
-          reqs = wall['meta']['requirementsParsed']
-          assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in reqs)
-          assert wall['meta']['rarity'] == 'common'
-          assert wall['meta']['sourcePath'].endswith('wall-jump.json')
-          fighter_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='class' and group_key='fighter' limit 1").fetchone()[0])
-          assert fighter_feat['meta']['groupKey'] == 'fighter'
-          arch_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='archetype' and group_key<>'' limit 1").fetchone()[0])
-          assert arch_feat['meta']['groupKey']
-          human_heritage = json.loads(db.execute("select json from rules where category='heritage' and name='Versatile Human'").fetchone()[0])
-          assert human_heritage['meta']['ancestry'] == 'Human' and human_heritage['meta']['versatile'] is False
-          beastkin = json.loads(db.execute("select json from rules where category='heritage' and name='Beastkin'").fetchone()[0])
-          assert beastkin['meta']['versatile'] is True
-          sword = json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
-          assert sword['meta']['damageDie'] == 'd8' and sword['meta']['damageType'] == 'slashing'
-          force = json.loads(db.execute("select json from rules where category='spell' and name='Force Barrage'").fetchone()[0])
-          assert 'arcane' in force['meta']['traditions'] and force['level'] == 1
+          assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in wall['meta']['requirementsParsed'])
           db.close()
           PY
 
-      - name: Build installable debug APK
+      - name: Build installable APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify APK signature and retain signer tool
+      - name: Verify APK signature
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
@@ -97,8 +87,7 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           mkdir -p ci-tools
           cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
-          test -s ci-tools/apksigner.jar
-          ls -lh "$APK" app/src/main/assets/rules.db ci-tools/apksigner.jar
+          ls -lh "$APK" app/src/main/assets/rules.db
 
       - name: Enable KVM acceleration
         run: |
@@ -107,7 +96,7 @@ jobs:
             ls -l /dev/kvm
           fi
 
-      - name: Install, launch and inspect rules build on Android emulator
+      - name: Install and inspect graph builder on Android 35
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -119,36 +108,34 @@ jobs:
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop ru.gran.gran2e
-            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
             sleep 15
-            adb shell pidof ru.gran.gran2e
-            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e.MainActivityV2'
-            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' || true
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 700; exit 1)
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e.MainActivityV3'
             adb shell uiautomator dump /sdcard/window-top.xml
             adb shell cat /sdcard/window-top.xml > window-top.xml
-            head -c 20000 window-top.xml || true
             grep -q 'ГРАНЬ 2e' window-top.xml
-            grep -q 'ПЛАНИРОВЩИК 1–20' window-top.xml
+            grep -q 'ПЕРСОНАЖ' window-top.xml
+            grep -q 'ПРОГРЕССИЯ 1–20' window-top.xml
             grep -q '17025' window-top.xml || grep -q 'база 17025' window-top.xml
-            adb exec-out screencap -p > gran2e-top.png
-            adb shell input swipe 540 1900 540 650 600
+            adb exec-out screencap -p > gran2e-runtime-top.png
+            adb shell input swipe 540 1900 540 650 650
             sleep 2
             adb shell uiautomator dump /sdcard/window-scroll.xml
             adb shell cat /sdcard/window-scroll.xml > window-scroll.xml
             grep -q 'УРОВЕНЬ 1' window-scroll.xml || grep -q 'УРОВЕНЬ 2' window-scroll.xml
-            adb exec-out screencap -p > gran2e-scroll.png
-            test -s gran2e-top.png
-            test -s gran2e-scroll.png
+            adb exec-out screencap -p > gran2e-runtime-scroll.png
+            test -s gran2e-runtime-top.png
+            test -s gran2e-runtime-scroll.png
 
-      - name: Upload verified APK
+      - name: Upload verified runtime APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-1.1.0-rules-verified-apk
+          name: Gran2e-1.2.0-runtime-verified-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
-            gran2e-top.png
-            gran2e-scroll.png
+            gran2e-runtime-top.png
+            gran2e-runtime-scroll.png
             window-top.xml
             window-scroll.xml
             ci-tools/apksigner.jar

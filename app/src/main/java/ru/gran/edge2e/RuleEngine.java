@@ -22,11 +22,20 @@ public final class RuleEngine {
     private RuleEngine() { }
 
     public static boolean canChoose(RuleItem item, CharacterState state, String slotCategory, int slotLevel) {
-        return blockReason(item, state, slotCategory, slotLevel) == null;
+        return blockReason(item, state, null, slotCategory, slotLevel) == null;
+    }
+
+    public static boolean canChoose(RuleItem item, CharacterState state, RuleRuntime.Snapshot runtime, String slotCategory, int slotLevel) {
+        return blockReason(item, state, runtime, slotCategory, slotLevel) == null;
     }
 
     /** Returns null when the choice is legal, otherwise a human-readable reason. */
     public static String blockReason(RuleItem item, CharacterState state, String slotCategory, int slotLevel) {
+        return blockReason(item, state, null, slotCategory, slotLevel);
+    }
+
+    /** Runtime-aware legality check: automatic class features and executed rule elements count as prerequisites. */
+    public static String blockReason(RuleItem item, CharacterState state, RuleRuntime.Snapshot runtime, String slotCategory, int slotLevel) {
         if (item == null) return "Правило не найдено";
         if (item.level > slotLevel) return "Нужен уровень " + item.level;
         if (!slotMatches(item, slotCategory)) return "Не подходит для этого типа выбора";
@@ -34,9 +43,7 @@ public final class RuleEngine {
         String group = item.meta.optString("groupKey", "");
         if ("class".equals(slotCategory) && "class".equals(item.subtype) && !state.className.isEmpty()) {
             String current = slug(state.className);
-            if (!group.isEmpty() && !group.equals(current) && !hasTrait(item, current)) {
-                return "Фит другого класса";
-            }
+            if (!group.isEmpty() && !group.equals(current) && !hasTrait(item, current)) return "Фит другого класса";
             if (group.isEmpty() && !hasTrait(item, current)) return "Фит другого класса";
         }
 
@@ -60,12 +67,13 @@ public final class RuleEngine {
             }
         }
 
-        String structured = structuredRequirementBlock(item, state);
+        String structured = structuredRequirementBlock(item, state, runtime);
         if (structured != null) return structured;
 
-        Set<String> selected = state.selectedNames();
+        Set<String> selected = runtime == null ? state.selectedNames() : runtime.allNames();
+        selected.addAll(state.selectedNames());
         for (String prereq : item.prerequisites) {
-            if (!prerequisiteMet(prereq, state, selected)) return "Не выполнено: " + prereq;
+            if (!prerequisiteMet(prereq, state, runtime, selected)) return "Не выполнено: " + prereq;
         }
         return null;
     }
@@ -77,13 +85,11 @@ public final class RuleEngine {
         if ("class".equals(slotCategory)) return "class".equals(item.subtype) || "archetype".equals(item.subtype);
         if ("ancestry".equals(slotCategory)) return "ancestry".equals(item.subtype);
         if ("skill".equals(slotCategory)) return "skill".equals(item.subtype);
-        if ("general".equals(slotCategory)) {
-            return "general".equals(item.subtype) || ("skill".equals(item.subtype) && hasTrait(item, "general"));
-        }
+        if ("general".equals(slotCategory)) return "general".equals(item.subtype) || ("skill".equals(item.subtype) && hasTrait(item, "general"));
         return false;
     }
 
-    private static String structuredRequirementBlock(RuleItem item, CharacterState state) {
+    private static String structuredRequirementBlock(RuleItem item, CharacterState state, RuleRuntime.Snapshot runtime) {
         JSONArray requirements = item.meta.optJSONArray("requirementsParsed");
         if (requirements == null) return null;
         for (int i = 0; i < requirements.length(); i++) {
@@ -93,7 +99,7 @@ public final class RuleEngine {
             if ("skill".equals(kind)) {
                 String skill = req.optString("skill", "");
                 int rank = req.optInt("rank", 0);
-                if (state.rank(skill) < rank) return rankLabel(rank) + " в навыке " + skill;
+                if (rank(state, runtime, skill) < rank) return rankLabel(rank) + " в навыке " + skill;
             } else if ("level".equals(kind)) {
                 int level = req.optInt("level", 0);
                 if (state.level < level) return "Нужен уровень " + level;
@@ -103,14 +109,14 @@ public final class RuleEngine {
                 String format = req.optString("format", "modifier");
                 int requiredMod = "score".equals(format) ? Math.floorDiv(value - 10, 2) : value;
                 if (StatsState.currentAbility(ability) < requiredMod) return "Недостаточная характеристика " + ability;
-            } else if ("spellcasting".equals(kind) && !hasSpellcasting(state)) {
+            } else if ("spellcasting".equals(kind) && !hasSpellcasting(state, runtime)) {
                 return "Требуется заклинательство";
             }
         }
         return null;
     }
 
-    private static boolean prerequisiteMet(String raw, CharacterState state, Set<String> selected) {
+    private static boolean prerequisiteMet(String raw, CharacterState state, RuleRuntime.Snapshot runtime, Set<String> selected) {
         if (raw == null) return true;
         String p = raw.trim();
         if (p.isEmpty()) return true;
@@ -122,7 +128,7 @@ public final class RuleEngine {
             sawRank = true;
             int required = rankValue(rank.group(1));
             String skill = normalizeSkill(rank.group(2));
-            if (state.rank(skill) < required) return false;
+            if (rank(state, runtime, skill) < required) return false;
         }
         if (sawRank) return true;
 
@@ -137,10 +143,10 @@ public final class RuleEngine {
             return StatsState.currentAbility(key) >= required;
         }
 
-        if (lower.startsWith("trained in ")) return state.rank(normalizeSkill(p.substring(11))) >= 1;
+        if (lower.startsWith("trained in ")) return rank(state, runtime, normalizeSkill(p.substring(11))) >= 1;
 
         if (lower.contains("spellcasting") || lower.contains("cast spells") || lower.contains("cast a spell")) {
-            return hasSpellcasting(state);
+            return hasSpellcasting(state, runtime);
         }
 
         String cleaned = lower.replace("feat", "").replace("the ", "").trim();
@@ -148,18 +154,21 @@ public final class RuleEngine {
             if (cleaned.equals(selectedName) || cleaned.contains(selectedName) || selectedName.contains(cleaned)) return true;
         }
 
-        // Equipment prerequisites can be checked from the selected inventory names.
         if (lower.contains("shield")) {
             for (String selectedName : selected) if (selectedName.contains("shield")) return true;
             return false;
         }
 
-        // Unknown prerequisites are deliberately conservative: a choice is not offered
-        // until the engine can prove that its prerequisite is satisfied.
+        // Unknown prerequisites are deliberately conservative. This is a builder, not a permissive list viewer.
         return false;
     }
 
-    private static boolean hasSpellcasting(CharacterState state) {
+    private static int rank(CharacterState state, RuleRuntime.Snapshot runtime, String skill) {
+        return runtime == null ? state.rank(skill) : runtime.rank(state, skill);
+    }
+
+    private static boolean hasSpellcasting(CharacterState state, RuleRuntime.Snapshot runtime) {
+        if (runtime != null && runtime.rollOptions().contains("self:spellcasting")) return true;
         String current = slug(state.className);
         if (SPELLCASTING_CLASSES.contains(current)) return true;
         for (String name : state.selectedNames()) {
@@ -221,7 +230,7 @@ public final class RuleEngine {
     }
 
     private static String slug(String s) {
-        return s == null ? "" : s.toLowerCase(Locale.ROOT).trim().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        return RuleRuntime.slug(s);
     }
 
     public static boolean classHasSlot(RuleItem classItem, String key, int level, int[] fallback) {
