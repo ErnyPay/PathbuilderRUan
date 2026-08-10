@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -15,8 +16,12 @@ ABILITIES = [
 LABELS = dict(ABILITIES)
 
 
+def runtime_slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", str(value).lower().strip()).strip("-")
+
+
 def flag_option(flag: str, ability: str, previous_flags: list[str]) -> dict:
-    predicates = [{"not": f"rules-selection:{p.lower()}:{ability}"} for p in previous_flags]
+    predicates = [{"not": f"rules-selection:{runtime_slug(p)}:{ability}"} for p in previous_flags]
     result = {"label": LABELS.get(ability, ability), "value": ability}
     if predicates:
         result["predicate"] = predicates
