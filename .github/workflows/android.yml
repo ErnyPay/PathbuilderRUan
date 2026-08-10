@@ -30,7 +30,7 @@ jobs:
 
       - name: Build rules Russian dictionaries and runtime
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/prepare_2_0.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/prepare_2_0.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -38,6 +38,7 @@ jobs:
           python3 scripts/inject_rule_constraints.py
           python3 scripts/apply_ru_dictionary.py
           python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
           python3 scripts/prepare_2_0.py
 
       - name: Verify corpus runtime and Russian coverage
@@ -84,8 +85,12 @@ jobs:
           assert len(names) >= 15000 and ru_meta >= 15000 and ru_desc >= 14000
           assert os.path.getsize('app/src/main/assets/ru_names.json') > 500000
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
-          assert fighter['meta']['features']
+          wizard = json.loads(db.execute("select json from rules where category='class' and name='Wizard'").fetchone()[0])
+          bard = json.loads(db.execute("select json from rules where category='class' and name='Bard'").fetchone()[0])
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
+          assert fighter['meta']['features']
+          assert wizard['meta'].get('traditions') == ['arcane']
+          assert bard['meta'].get('traditions') == ['occult']
           assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in wall['meta']['requirementsParsed'])
           db.close()
           PY
@@ -93,6 +98,9 @@ jobs:
           grep -q 'private String screen = "sheet"' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
           grep -q 'case "BaseSpeed"' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
           grep -q 'case "MartialProficiency"' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
+          grep -q 'spellTraditions()' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
+          grep -q 'magicTraditions' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
+          grep -q 'spellMatchesTraditions' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
           grep -q 'runtime.martialRank(weapon' app/src/main/java/ru/gran/edge2e/DerivedStats.java
           grep -q 'runtime.baseSpeed("land"' app/src/main/java/ru/gran/edge2e/DerivedStats.java
           grep -q '#47131E' app/src/main/res/values/styles.xml
@@ -167,6 +175,7 @@ jobs:
             adb shell uiautomator dump /sdcard/spells.xml
             adb shell cat /sdcard/spells.xml > spells.xml
             grep -q 'Поиск заклинания' spells.xml
+            grep -q 'нет источника заклинаний' spells.xml
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen equipment
             sleep 2
