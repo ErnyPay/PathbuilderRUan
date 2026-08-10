@@ -28,15 +28,16 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build rules and Russian dictionaries
+      - name: Build rules Russian dictionaries and runtime
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/prepare_2_0.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/prepare_2_0.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
           python3 scripts/inject_ability_choices.py
           python3 scripts/inject_rule_constraints.py
           python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
           python3 scripts/prepare_2_0.py
 
       - name: Verify corpus runtime and Russian coverage
@@ -71,16 +72,17 @@ jobs:
           names = json.load(open('app/src/main/assets/ru_names.json', encoding='utf-8'))
           texts = json.load(open('app/src/main/assets/ru_text.json', encoding='utf-8'))
           print('Rules:', n, 'version:', version, 'classes:', classes, 'feats:', feats, 'spells:', spells, 'equipment:', equipment)
-          print('Runtime rows:', with_runtime, 'Rule elements:', keys.most_common(20), 'ability choices:', ability_choices)
+          print('Runtime rows:', with_runtime, 'Rule elements:', keys.most_common(22), 'ability choices:', ability_choices)
           print('Russian names asset:', len(names), 'text rows:', len(texts), 'ru meta:', ru_meta, 'ru descriptions:', ru_desc)
           print('Russian samples:', list(names.items())[:20])
           assert version == 5
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           assert with_runtime > 2500
           assert keys['ChoiceSet'] > 1000 and keys['ActiveEffectLike'] > 100 and keys['GrantItem'] > 100
+          assert keys['BaseSpeed'] > 100 and keys['MartialProficiency'] > 50
           assert ability_choices > 1000
-          assert len(names) >= 500 and ru_meta >= 500
-          assert os.path.getsize('app/src/main/assets/ru_names.json') > 10000
+          assert len(names) >= 15000 and ru_meta >= 15000 and ru_desc >= 14000
+          assert os.path.getsize('app/src/main/assets/ru_names.json') > 500000
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           assert fighter['meta']['features']
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
@@ -89,6 +91,12 @@ jobs:
           PY
           grep -q 'putExtra("screen", target)' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
           grep -q 'private String screen = "sheet"' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'case "BaseSpeed"' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
+          grep -q 'case "MartialProficiency"' app/src/main/java/ru/gran/edge2e/RuleRuntime.java
+          grep -q 'runtime.martialRank(weapon' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q 'runtime.baseSpeed("land"' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q '#47131E' app/src/main/res/values/styles.xml
+          grep -q '#7D1F30' app/src/main/res/values/styles.xml
 
       - name: Build installable APK
         run: gradle :app:assembleDebug --stacktrace
