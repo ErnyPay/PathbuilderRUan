@@ -10,8 +10,8 @@ android {
         applicationId 'ru.gran.gran2e'
         minSdk 24
         targetSdk 35
-        versionCode 130
-        versionName '1.3.0'
+        versionCode 200
+        versionName '2.0.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
 
