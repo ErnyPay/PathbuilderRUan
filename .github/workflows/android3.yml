@@ -29,7 +29,7 @@ jobs:
 
       - name: Build complete rules corpus and 3.0 UX
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/prepare_2_0.py scripts/prepare_3_0.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -40,6 +40,7 @@ jobs:
           python3 scripts/spell_rules_2_0.py
           python3 scripts/prepare_2_0.py
           python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
 
       - name: Verify rule corpus and 3.0 structure
         run: |
@@ -47,7 +48,7 @@ jobs:
           test -s app/src/main/assets/ru_names.json
           test -s app/src/main/assets/ru_text.json
           python3 - <<'PY'
-          import json, sqlite3, os
+          import json, sqlite3
           db=sqlite3.connect('app/src/main/assets/rules.db')
           total=db.execute('select count(*) from rules').fetchone()[0]
           feats=db.execute("select count(*) from rules where category='feat'").fetchone()[0]
@@ -66,6 +67,9 @@ jobs:
           grep -q 'case "pets": showPets' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
           grep -q 'case "effects": showEffects' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
           grep -q 'МОИ ПЕРСОНАЖИ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'showRunes(item)' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ItemMods.potency' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q 'ItemMods.striking' app/src/main/java/ru/gran/edge2e/DerivedStats.java
           grep -q "versionName '3.0.0'" app/build.gradle
 
       - name: Build installable APK
