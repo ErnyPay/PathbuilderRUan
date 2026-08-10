@@ -7,7 +7,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'ru.gran.edge2e'
+        applicationId 'ru.gran.gran2e'
         minSdk 24
         targetSdk 35
         versionCode 100
