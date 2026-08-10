@@ -129,7 +129,6 @@ public final class RuleRuntime {
             if (trained != null) applyTrainedSkills(out, trained.optJSONArray("value"));
             applyClassBaseProficiencies(out, cls);
             addFeatureList(store, out, cls.meta.optJSONArray("features"), state.level);
-            addClassAdditionalSkillPrompts(out, state, cls);
         }
         if (background != null) addFeatureList(store, out, background.meta.optJSONArray("features"), state.level);
 
@@ -143,6 +142,11 @@ public final class RuleRuntime {
             refreshSkillRollOptions(out, state);
             if (beforeItems == out.items.size() && beforeOptions == out.rollOptions.size() && beforeRanks == hashRanks(out)) break;
         }
+
+        // Class free trained skills are resolved after class/background Rule Elements so options can
+        // exclude skills already granted by those rules. PF2e classes grant a base number plus INT mod.
+        if (cls != null) addClassAdditionalSkillPrompts(out, state, cls, stats);
+        refreshSkillRollOptions(out, state);
 
         if (ancestry != null) out.rollOptions.add("self:ancestry:" + slug(ancestry.name));
         if (background != null) out.rollOptions.add("self:background:" + slug(background.name));
@@ -199,21 +203,47 @@ public final class RuleRuntime {
         }
     }
 
-    private static void addClassAdditionalSkillPrompts(Snapshot out, CharacterState state, RuleItem cls) {
+    private static void addClassAdditionalSkillPrompts(Snapshot out, CharacterState state, RuleItem cls, StatsState stats) {
         JSONObject trained = cls.meta.optJSONObject("trainedSkills");
         if (trained == null) return;
-        int additional = Math.max(0, trained.optInt("additional", 0));
+        int intModifier = stats == null ? 0 : stats.ability("int");
+        int additional = Math.max(0, trained.optInt("additional", 0) + intModifier);
+        Set<String> chosenHere = new HashSet<>();
+
+        // Discard stale selections from a previous class/INT value that no longer has this many slots.
+        for (int i = additional; i < 16; i++) {
+            String staleFlag = "granClassSkill" + (i + 1);
+            if (!state.ruleSelection(cls.id, staleFlag).isEmpty()) state.setRuleSelection(cls.id, staleFlag, null);
+        }
+
         for (int i = 0; i < additional; i++) {
             String flag = "granClassSkill" + (i + 1);
-            String selected = state.ruleSelection(cls.id, flag);
-            if (!selected.isEmpty()) {
-                upgrade(out.skillRanks, slug(selected), 1);
-                out.rollOptions.add("skill:" + slug(selected) + ":rank:trained");
+            String selected = slug(state.ruleSelection(cls.id, flag));
+            boolean validSelected = !selected.isEmpty()
+                    && SKILLS.contains(selected)
+                    && !chosenHere.contains(selected)
+                    && out.rank(state, selected) <= 0;
+
+            if (validSelected) {
+                chosenHere.add(selected);
+                upgrade(out.skillRanks, selected, 1);
+                out.rollOptions.add("skill:" + selected + ":rank:trained");
                 continue;
             }
+
+            if (!selected.isEmpty()) state.setRuleSelection(cls.id, flag, null);
             List<Option> options = new ArrayList<>();
-            for (String skill : SKILLS) options.add(new Option(skill, skill));
-            ChoicePrompt prompt = new ChoicePrompt(cls.id, flag, "Обученный навык класса " + (i + 1), options, false);
+            for (String skill : SKILLS) {
+                if (chosenHere.contains(skill) || out.rank(state, skill) > 0) continue;
+                options.add(new Option(skill, skill));
+            }
+            ChoicePrompt prompt = new ChoicePrompt(
+                    cls.id,
+                    flag,
+                    "Обученный навык класса " + (i + 1) + " из " + additional,
+                    options,
+                    false
+            );
             out.prompts.put(prompt.key(), prompt);
         }
     }
