@@ -19,31 +19,29 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
-/** Pathbuilder-like builder shell backed by the executable PF2e rule graph. */
+/** Character planner backed by the executable PF2e rule graph. */
 public final class MainActivityV3 extends Activity {
-    private static final int BG = Color.rgb(18, 22, 27);
-    private static final int HEADER = Color.rgb(27, 31, 37);
-    private static final int CARD = Color.rgb(35, 40, 47);
-    private static final int CARD_2 = Color.rgb(43, 49, 57);
-    private static final int BORDER = Color.rgb(68, 76, 87);
-    private static final int TEXT = Color.rgb(238, 240, 242);
-    private static final int MUTED = Color.rgb(166, 174, 184);
-    private static final int ACCENT = Color.rgb(198, 139, 65);
-    private static final int GOOD = Color.rgb(76, 175, 122);
-    private static final int BAD = Color.rgb(210, 82, 82);
+    private static final int BG = Color.rgb(239, 237, 232);
+    private static final int HEADER = Color.rgb(94, 26, 40);
+    private static final int HEADER_DARK = Color.rgb(71, 19, 30);
+    private static final int CARD = Color.rgb(255, 255, 255);
+    private static final int CARD_2 = Color.rgb(248, 246, 241);
+    private static final int BORDER = Color.rgb(207, 199, 188);
+    private static final int TEXT = Color.rgb(39, 36, 34);
+    private static final int MUTED = Color.rgb(107, 101, 95);
+    private static final int ACCENT = Color.rgb(125, 31, 48);
+    private static final int GOOD = Color.rgb(42, 124, 79);
+    private static final int BAD = Color.rgb(171, 55, 55);
+    private static final int WARM = Color.rgb(175, 112, 44);
 
     private static final String[][] SKILLS = {
             {"acrobatics", "Акробатика"}, {"arcana", "Аркана"}, {"athletics", "Атлетика"},
@@ -53,7 +51,11 @@ public final class MainActivityV3 extends Activity {
             {"society", "Общество"}, {"stealth", "Скрытность"}, {"survival", "Выживание"},
             {"thievery", "Воровство"}
     };
-    private static final String[] RANKS = {"Нет", "Обучен", "Эксперт", "Мастер", "Легенда"};
+    private static final String[] RANKS = {"—", "ОБУЧЕН", "ЭКСПЕРТ", "МАСТЕР", "ЛЕГЕНДА"};
+    private static final String[][] ABILITIES = {
+            {"str", "СИЛ"}, {"dex", "ЛВК"}, {"con", "ТЕЛ"},
+            {"int", "ИНТ"}, {"wis", "МДР"}, {"cha", "ХАР"}
+    };
 
     private RuleStore store;
     private CharacterState state;
@@ -65,6 +67,7 @@ public final class MainActivityV3 extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(HEADER_DARK);
         store = new RuleStore(this);
         store.getReadableDatabase();
         state = CharacterState.load(this);
@@ -85,16 +88,40 @@ public final class MainActivityV3 extends Activity {
     }
 
     private View shell() {
-        LinearLayout root = column(); root.setBackgroundColor(BG);
-        LinearLayout top = column(); top.setPadding(dp(16), dp(12), dp(16), dp(8)); top.setBackgroundColor(HEADER);
-        TextView title = text("ГРАНЬ 2e", 23, true); title.setTextColor(ACCENT); top.addView(title);
-        subtitle = text("", 12, false); subtitle.setTextColor(MUTED); top.addView(subtitle);
+        LinearLayout root = column();
+        root.setBackgroundColor(BG);
+
+        LinearLayout top = column();
+        top.setPadding(dp(14), dp(9), dp(14), dp(8));
+        top.setBackgroundColor(HEADER);
+        LinearLayout titleLine = row();
+        titleLine.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("ГРАНЬ 2e", 21, true);
+        title.setTextColor(Color.WHITE);
+        titleLine.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView mode = text("ПЛАН ПЕРСОНАЖА", 11, true);
+        mode.setTextColor(Color.rgb(242, 211, 183));
+        titleLine.addView(mode);
+        top.addView(titleLine);
+        subtitle = text("", 12, false);
+        subtitle.setTextColor(Color.rgb(235, 218, 210));
+        top.addView(subtitle);
         root.addView(top, matchWrap());
 
-        HorizontalScrollView hsv = new HorizontalScrollView(this); hsv.setHorizontalScrollBarEnabled(false);
-        LinearLayout nav = row(); nav.setPadding(dp(6), dp(4), dp(6), dp(5));
-        nav(nav, "BUILD", "build"); nav(nav, "НАВЫКИ", "skills"); nav(nav, "ПРАВИЛА", "rules"); nav(nav, "ЛИСТ / БОЙ", "play");
-        hsv.addView(nav); root.addView(hsv, matchWrap());
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        hsv.setBackgroundColor(HEADER_DARK);
+        LinearLayout nav = row();
+        nav.setPadding(dp(5), dp(4), dp(5), dp(4));
+        nav(nav, "BUILD", "build");
+        nav(nav, "НАВЫКИ", "skills");
+        nav(nav, "ЗАЩИТА", "play");
+        nav(nav, "АТАКА", "play");
+        nav(nav, "СНАРЯЖ.", "play");
+        nav(nav, "ЗАКЛ.", "play");
+        nav(nav, "ЛИСТ / БОЙ", "play");
+        hsv.addView(nav);
+        root.addView(hsv, matchWrap());
 
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -102,128 +129,200 @@ public final class MainActivityV3 extends Activity {
     }
 
     private void nav(LinearLayout parent, String label, String target) {
-        TextView v = chip(label, screen.equals(target));
+        boolean active = screen.equals(target) && !"play".equals(target);
+        TextView v = tab(label, active);
         v.setOnClickListener(x -> {
             if ("play".equals(target)) {
                 startActivity(new Intent(this, MainActivityV2.class));
                 return;
             }
-            screen = target; render();
+            screen = target;
+            render();
         });
-        parent.addView(v, wrapWrap(dp(4)));
+        parent.addView(v, wrapWrap(dp(2)));
     }
 
     private void render() {
+        stats = StatsState.load(this);
         rebuildRuntime();
         String cls = state.className.isEmpty() ? "класс не выбран" : RuNames.shortName(state.className);
-        subtitle.setText("ур. " + state.level + " • " + cls + " • база " + store.count() + " • активных правил " + runtime.allItems().size());
+        int[] completion = completion();
+        String remain = runtime.choices().isEmpty() ? "" : " • обязательных выборов " + runtime.choices().size();
+        subtitle.setText("ур. " + state.level + " • " + cls + " • сборка " + completion[0] + "/" + completion[1] + remain);
         content.removeAllViews();
-        if ("skills".equals(screen)) content.addView(scroll(skillsPage()));
-        else if ("rules".equals(screen)) content.addView(scroll(rulesPage()));
-        else content.addView(scroll(buildPage()));
+        content.addView(scroll("skills".equals(screen) ? skillsPage() : buildPage()));
     }
 
     private LinearLayout buildPage() {
         LinearLayout col = page();
-        col.addView(section("ПЕРСОНАЖ"));
-        LinearLayout identity = card();
-        identity.addView(selector("Род", state.ancestry, "ancestry", "base:ancestry"));
-        identity.addView(selector("Наследие", state.choiceName("base:heritage"), "heritage", "base:heritage"));
-        identity.addView(selector("Предыстория", state.background, "background", "base:background"));
-        identity.addView(selector("Класс", state.className, "class", "base:class"));
-        identity.addView(levelRow());
-        col.addView(identity, matchWrap(dp(7)));
+        col.addView(heroCard(), matchWrap(dp(6)));
 
         List<RuleRuntime.ChoicePrompt> prompts = runtime.choices();
         if (!prompts.isEmpty()) {
-            col.addView(section("ОБЯЗАТЕЛЬНЫЕ ВЫБОРЫ"));
+            col.addView(section("НУЖНО ВЫБРАТЬ"));
             LinearLayout choices = card();
             for (RuleRuntime.ChoicePrompt prompt : prompts) choices.addView(ruleChoiceRow(prompt));
-            col.addView(choices, matchWrap(dp(7)));
+            col.addView(choices, matchWrap(dp(4)));
         }
 
-        col.addView(section("ПРОГРЕССИЯ 1–20"));
+        TextView progression = section("ПРОГРЕССИЯ 1–20");
+        col.addView(progression);
         RuleItem cls = classItem();
         for (int level = 1; level <= 20; level++) {
-            LinearLayout lc = card();
-            TextView h = text("УРОВЕНЬ " + level, 17, true); h.setTextColor(level <= state.level ? ACCENT : MUTED); lc.addView(h);
-            int featureCount = 0;
+            LinearLayout levelCard = card();
+            levelCard.setPadding(0, 0, 0, dp(5));
+            levelCard.addView(levelHeader(level));
+
+            int rows = 0;
             for (RuleItem item : runtime.allItems()) {
                 if (!runtime.isAutomatic(item.id) || runtime.automaticLevel(item.id) != level) continue;
-                lc.addView(infoRow("Автоматически", RuNames.shortName(item.name), GOOD));
-                featureCount++;
+                TextView auto = compactRow("✓", RuNames.shortName(item.name), "автоматически", GOOD);
+                auto.setOnClickListener(v -> ruleDetail(item, null));
+                levelCard.addView(auto);
+                rows++;
             }
-            boolean slot = false;
+
             if (RuleEngine.classHasSlot(cls, "classFeatLevels", level, new int[]{1,2,4,6,8,10,12,14,16,18,20})) {
-                lc.addView(featSlot(level, "Классовый / архетипный фит", "class")); slot = true;
+                levelCard.addView(featSlot(level, "Классовый / архетипный фит", "class")); rows++;
             }
             if (RuleEngine.classHasSlot(cls, "ancestryFeatLevels", level, new int[]{1,5,9,13,17})) {
-                lc.addView(featSlot(level, "Фит рода", "ancestry")); slot = true;
+                levelCard.addView(featSlot(level, "Фит рода", "ancestry")); rows++;
             }
             if (RuleEngine.classHasSlot(cls, "skillFeatLevels", level, new int[]{2,4,6,8,10,12,14,16,18,20})) {
-                lc.addView(featSlot(level, "Фит навыка", "skill")); slot = true;
+                levelCard.addView(featSlot(level, "Фит навыка", "skill")); rows++;
             }
             if (RuleEngine.classHasSlot(cls, "generalFeatLevels", level, new int[]{3,7,11,15,19})) {
-                lc.addView(featSlot(level, "Общий фит", "general")); slot = true;
+                levelCard.addView(featSlot(level, "Общий фит", "general")); rows++;
             }
             if (RuleEngine.classHasSlot(cls, "skillIncreaseLevels", level, new int[]{3,5,7,9,11,13,15,17,19})) {
-                TextView r = actionRow("Повышение навыка", "Открыть навыки");
-                r.setOnClickListener(v -> { screen = "skills"; render(); }); lc.addView(r); slot = true;
+                TextView r = compactRow("↑", "Повышение навыка", "открыть навыки", WARM);
+                r.setOnClickListener(v -> { screen = "skills"; render(); });
+                levelCard.addView(r); rows++;
             }
-            if (featureCount == 0 && !slot) lc.addView(note("Нет отдельного выбора на этом уровне."));
-            col.addView(lc, matchWrap(dp(6)));
+            if (isAbilityBoostLevel(level)) {
+                levelCard.addView(compactRow("◆", "Повышения характеристик", level == 1 ? "создание персонажа" : "4 повышения", ACCENT));
+                rows++;
+            }
+            if (rows == 0) levelCard.addView(note("На этом уровне нет отдельного выбора."));
+            col.addView(levelCard, matchWrap(dp(4)));
         }
         return col;
     }
 
+    private View heroCard() {
+        LinearLayout outer = card();
+        outer.setPadding(dp(10), dp(9), dp(10), dp(10));
+
+        EditText name = input("Имя персонажа");
+        name.setText(state.name);
+        name.setTextSize(20);
+        name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        name.setSelectAllOnFocus(false);
+        name.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable s) { state.name = s.toString(); state.save(MainActivityV3.this); }
+        });
+        outer.addView(name, matchWrap(dp(3)));
+
+        LinearLayout identity = column();
+        identity.addView(selector("Род", state.ancestry, "ancestry", "base:ancestry"));
+        identity.addView(selector("Наследие", state.choiceName("base:heritage"), "heritage", "base:heritage"));
+        identity.addView(selector("Предыстория", state.background, "background", "base:background"));
+        identity.addView(selector("Класс", state.className, "class", "base:class"));
+        outer.addView(identity);
+        outer.addView(levelRow());
+
+        LinearLayout abilities = row();
+        abilities.setGravity(Gravity.CENTER);
+        abilities.setPadding(0, dp(7), 0, 0);
+        for (String[] a : ABILITIES) abilities.addView(abilityBox(a[1], stats.abilityScore(a[0]), stats.ability(a[0])), new LinearLayout.LayoutParams(0, dp(64), 1));
+        outer.addView(abilities);
+        return outer;
+    }
+
+    private View abilityBox(String label, int score, int mod) {
+        LinearLayout box = column();
+        box.setGravity(Gravity.CENTER);
+        box.setBackground(round(CARD_2, 7, BORDER));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(64), 1);
+        p.setMargins(dp(2), 0, dp(2), 0);
+        box.setLayoutParams(p);
+        TextView l = text(label, 10, true); l.setTextColor(MUTED); l.setGravity(Gravity.CENTER);
+        TextView s = text(String.valueOf(score), 18, true); s.setTextColor(ACCENT); s.setGravity(Gravity.CENTER);
+        TextView m = text((mod >= 0 ? "+" : "") + mod, 10, false); m.setTextColor(MUTED); m.setGravity(Gravity.CENTER);
+        box.addView(l); box.addView(s); box.addView(m);
+        return box;
+    }
+
     private View selector(String label, String current, String category, String key) {
-        TextView row = actionRow(label, current == null || current.isEmpty() ? "Выбрать" : RuNames.shortName(current));
+        String value = current == null || current.isEmpty() ? "Выбрать" : RuNames.shortName(current);
+        TextView row = compactRow(current == null || current.isEmpty() ? "+" : "✓", label, value, current == null || current.isEmpty() ? WARM : GOOD);
         row.setOnClickListener(v -> showBasePicker(category, item -> {
             if ("class".equals(category)) {
+                clearSelectionsForNamed("class", state.className);
                 state.className = item.name;
-                state.clearRuleSelectionsFor(item.id);
             } else if ("ancestry".equals(category)) {
+                clearSelectionsForNamed("ancestry", state.ancestry);
                 state.ancestry = item.name;
                 state.setChoice("base:heritage", null);
-            } else if ("background".equals(category)) state.background = item.name;
-            else state.setChoice(key, item);
+            } else if ("background".equals(category)) {
+                clearSelectionsForNamed("background", state.background);
+                state.background = item.name;
+            } else state.setChoice(key, item);
             saveAndRevalidate();
         }));
         return row;
     }
 
+    private void clearSelectionsForNamed(String category, String name) {
+        if (name == null || name.isEmpty()) return;
+        RuleItem old = store.findExact(category, name);
+        if (old != null) state.clearRuleSelectionsFor(old.id);
+    }
+
     private View levelRow() {
-        LinearLayout r = row(); r.setGravity(Gravity.CENTER_VERTICAL); r.setPadding(dp(10), dp(8), dp(10), dp(8));
-        TextView label = text("Уровень", 14, true); r.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button minus = mini("−"), plus = mini("+"); TextView value = text(String.valueOf(state.level), 17, true); value.setGravity(Gravity.CENTER); value.setMinWidth(dp(42));
+        LinearLayout r = row();
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(8), dp(7), dp(8), dp(3));
+        TextView label = text("УРОВЕНЬ", 12, true); label.setTextColor(MUTED);
+        r.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button minus = mini("−"), plus = mini("+");
+        TextView value = text(String.valueOf(state.level), 22, true); value.setTextColor(ACCENT); value.setGravity(Gravity.CENTER); value.setMinWidth(dp(48));
         minus.setOnClickListener(v -> { if (state.level > 1) { state.level--; saveAndRevalidate(); } });
         plus.setOnClickListener(v -> { if (state.level < 20) { state.level++; saveAndRevalidate(); } });
-        r.addView(minus); r.addView(value); r.addView(plus); return r;
+        r.addView(minus); r.addView(value); r.addView(plus);
+        return r;
     }
 
     private View ruleChoiceRow(RuleRuntime.ChoicePrompt prompt) {
         String selected = state.ruleSelection(prompt.sourceId, prompt.flag);
-        TextView row = actionRow(cleanPrompt(prompt.title), selected.isEmpty() ? (prompt.dynamic ? "Нужен обработчик" : "Выбрать") : selected);
-        if (prompt.options.isEmpty()) {
+        String shown = selected.isEmpty() ? "Выбрать" : selectedChoiceLabel(prompt, selected);
+        boolean available = !prompt.options.isEmpty();
+        TextView row = compactRow(selected.isEmpty() ? "!" : "✓", cleanPrompt(prompt), shown, selected.isEmpty() ? WARM : GOOD);
+        if (!available) {
             row.setTextColor(MUTED);
-            row.setOnClickListener(v -> Toast.makeText(this, "Динамический ChoiceSet пока не может быть вычислен автоматически", Toast.LENGTH_LONG).show());
-        } else {
-            row.setOnClickListener(v -> {
-                String[] labels = new String[prompt.options.size()];
-                for (int i = 0; i < labels.length; i++) labels[i] = prompt.options.get(i).label + "  [" + prompt.options.get(i).value + "]";
-                new AlertDialog.Builder(this).setTitle(cleanPrompt(prompt.title)).setItems(labels, (d, which) -> {
-                    state.setRuleSelection(prompt.sourceId, prompt.flag, prompt.options.get(which).value);
-                    saveAndRevalidate();
-                }).setNegativeButton("Отмена", null).show();
-            });
+            row.setOnClickListener(v -> new AlertDialog.Builder(this)
+                    .setTitle(cleanPrompt(prompt))
+                    .setMessage("Для этого обязательного выбора пока не удалось сформировать варианты. Он не будет подменён случайным или неверным значением.")
+                    .setPositiveButton("Понятно", null).show());
+            return row;
         }
+        row.setOnClickListener(v -> {
+            String[] labels = new String[prompt.options.size()];
+            for (int i = 0; i < labels.length; i++) labels[i] = choiceLabel(prompt.options.get(i));
+            new AlertDialog.Builder(this).setTitle(cleanPrompt(prompt)).setItems(labels, (d, which) -> {
+                state.setRuleSelection(prompt.sourceId, prompt.flag, prompt.options.get(which).value);
+                saveAndRevalidate();
+            }).setNegativeButton("Отмена", null).show();
+        });
         return row;
     }
 
     private View featSlot(int level, String label, String slotCategory) {
         String key = "L" + level + ":" + slotCategory;
         String chosen = state.choiceName(key);
-        TextView row = actionRow(label, chosen.isEmpty() ? "Выбрать" : RuNames.shortName(chosen));
+        TextView row = compactRow(chosen.isEmpty() ? "+" : "✓", label, chosen.isEmpty() ? "Выбрать" : RuNames.shortName(chosen), chosen.isEmpty() ? WARM : GOOD);
         row.setOnClickListener(v -> showFeatPicker(slotCategory, level, key));
         row.setOnLongClickListener(v -> { state.setChoice(key, null); saveAndRevalidate(); return true; });
         return row;
@@ -231,81 +330,91 @@ public final class MainActivityV3 extends Activity {
 
     private LinearLayout skillsPage() {
         LinearLayout col = page();
-        col.addView(section("НАВЫКИ"));
-        col.addView(note("Ранг = максимум из базового выбора, автоматических Rule Elements и ручных повышений. Ограничение по уровню: Эксперт 3+, Мастер 7+, Легенда 15+."));
+        LinearLayout summary = card();
+        TextView h = text("НАВЫКИ", 19, true); h.setTextColor(ACCENT); summary.addView(h);
+        summary.addView(note("Автоматические владения класса и предыстории уже учтены. Повышение вручную ограничено уровнем персонажа."));
+        col.addView(summary, matchWrap(dp(5)));
+
         LinearLayout c = card();
         for (String[] skill : SKILLS) {
             String key = skill[0];
-            LinearLayout r = row(); r.setGravity(Gravity.CENTER_VERTICAL); r.setPadding(dp(8), dp(6), dp(8), dp(6));
-            TextView name = text(skill[1], 14, false); r.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            LinearLayout r = row();
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            r.setPadding(dp(9), dp(7), dp(9), dp(7));
+            TextView name = text(skill[1], 14, false);
+            r.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             int effective = runtime.rank(state, key);
-            TextView rank = text(RANKS[Math.max(0, Math.min(4, effective))], 13, true); rank.setTextColor(effective > state.rank(key) ? GOOD : TEXT); rank.setMinWidth(dp(82)); rank.setGravity(Gravity.CENTER);
+            TextView rank = badge(RANKS[Math.max(0, Math.min(4, effective))], effective > 0 ? GOOD : MUTED);
             Button minus = mini("−"), plus = mini("+");
-            minus.setOnClickListener(v -> { state.setRank(key, Math.max(0, state.rank(key) - 1)); state.save(this); render(); });
-            plus.setOnClickListener(v -> { state.setRank(key, Math.min(state.maxSkillRankForLevel(), state.rank(key) + 1)); state.save(this); render(); });
-            r.addView(minus); r.addView(rank); r.addView(plus); c.addView(r);
+            minus.setOnClickListener(v -> { state.setRank(key, Math.max(0, state.rank(key) - 1)); saveAndRevalidate(); });
+            plus.setOnClickListener(v -> { state.setRank(key, Math.min(state.maxSkillRankForLevel(), state.rank(key) + 1)); saveAndRevalidate(); });
+            r.addView(rank); r.addView(minus); r.addView(plus); c.addView(r);
         }
-        col.addView(c, matchWrap(dp(6))); return col;
-    }
-
-    private LinearLayout rulesPage() {
-        LinearLayout col = page(); col.addView(section("ИСПОЛНЯЕМЫЕ ПРАВИЛА"));
-        col.addView(note("Этот экран показывает не весь справочник, а то, что сейчас реально вошло в граф персонажа: базовые элементы, выбранные фиты, автоматические особенности и GrantItem."));
-        LinearLayout summary = card();
-        summary.addView(staticRow("Элементов графа", String.valueOf(runtime.allItems().size())));
-        summary.addView(staticRow("Незакрытых ChoiceSet", String.valueOf(runtime.choices().size())));
-        summary.addView(staticRow("Roll options", String.valueOf(runtime.rollOptions().size())));
-        summary.addView(staticRow("Предупреждений runtime", String.valueOf(runtime.warnings.size())));
-        col.addView(summary, matchWrap(dp(6)));
-
-        List<RuleItem> items = runtime.allItems();
-        Collections.sort(items, Comparator.comparingInt((RuleItem x) -> runtime.automaticLevel(x.id)).thenComparing(x -> x.name));
-        LinearLayout graph = card();
-        for (RuleItem item : items) {
-            String kind = runtime.isAutomatic(item.id) ? "AUTO ур. " + runtime.automaticLevel(item.id) : item.category;
-            TextView r = actionRow(RuNames.shortName(item.name), kind);
-            r.setOnClickListener(v -> ruleDetail(item, null)); graph.addView(r);
-        }
-        col.addView(graph, matchWrap(dp(6)));
-        if (!runtime.warnings.isEmpty()) {
-            col.addView(section("НЕПОДДЕРЖАННЫЕ / НЕРАЗРЕШЁННЫЕ ЭФФЕКТЫ"));
-            LinearLayout warn = card(); for (String w : runtime.warnings) warn.addView(note("• " + w)); col.addView(warn, matchWrap(dp(6)));
-        }
+        col.addView(c, matchWrap(dp(5)));
         return col;
     }
 
+    private View levelHeader(int level) {
+        LinearLayout head = row();
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(10), dp(7), dp(10), dp(7));
+        head.setBackground(round(level == state.level ? ACCENT : level < state.level ? HEADER_DARK : Color.rgb(126, 121, 116), 7, level <= state.level ? ACCENT : Color.rgb(126,121,116)));
+        TextView left = text("УРОВЕНЬ " + level, 15, true); left.setTextColor(Color.WHITE);
+        head.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        String mark = level < state.level ? "ГОТОВО" : level == state.level ? "ТЕКУЩИЙ" : "";
+        if (!mark.isEmpty()) { TextView right = text(mark, 10, true); right.setTextColor(Color.rgb(248,226,208)); head.addView(right); }
+        return head;
+    }
+
+    private TextView compactRow(String icon, String left, String right, int iconColor) {
+        TextView v = text(icon + "  " + left + "\n     " + right, 14, false);
+        v.setTextColor(TEXT);
+        v.setPadding(dp(10), dp(8), dp(10), dp(8));
+        v.setBackground(round(CARD_2, 6, BORDER));
+        LinearLayout.LayoutParams p = matchWrap(dp(2));
+        v.setLayoutParams(p);
+        if (iconColor == BAD) v.setTextColor(BAD);
+        return v;
+    }
+
     private void showBasePicker(String category, Selection selection) {
-        final EditText search = input("Поиск");
+        final EditText search = input("Поиск по-русски или по-английски");
         LinearLayout outer = column(); outer.setPadding(dp(10), dp(4), dp(10), dp(4)); outer.addView(search);
         ScrollView sv = new ScrollView(this); LinearLayout list = column(); sv.addView(list); outer.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(540)));
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Выбор").setView(outer).setNegativeButton("Закрыть", null).create();
         Runnable refresh = () -> {
             list.removeAllViews(); String q = search.getText().toString(); int shown = 0;
-            for (RuleItem item : store.query(category, 20, q, 350)) {
-                TextView r = actionRow(RuNames.display(item.name), item.source);
-                r.setOnClickListener(v -> { selection.select(item); dialog.dismiss(); }); list.addView(r); if (++shown >= 220) break;
+            for (RuleItem item : store.query(category, 20, "", 700)) {
+                if (!matches(item, q)) continue;
+                TextView r = compactRow("+", RuNames.shortName(item.name), item.source, WARM);
+                r.setOnClickListener(v -> { selection.select(item); dialog.dismiss(); });
+                list.addView(r); if (++shown >= 240) break;
             }
+            if (shown == 0) list.addView(note("Ничего не найдено."));
         };
         search.addTextChangedListener(watcher(refresh)); refresh.run(); dialog.show();
     }
 
     private void showFeatPicker(String slotCategory, int level, String choiceKey) {
         final EditText search = input("Поиск фита");
+        final boolean[] showLocked = {false};
         LinearLayout outer = column(); outer.setPadding(dp(10), dp(4), dp(10), dp(4)); outer.addView(search);
+        TextView filter = compactRow("☰", "Фильтр", "Только доступные", ACCENT); outer.addView(filter);
         TextView status = note(""); outer.addView(status);
         ScrollView sv = new ScrollView(this); LinearLayout list = column(); sv.addView(list); outer.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(560)));
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Выбор фита — уровень " + level).setView(outer)
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Фит — уровень " + level).setView(outer)
                 .setNeutralButton("Очистить", (d,w) -> { state.setChoice(choiceKey, null); saveAndRevalidate(); })
                 .setNegativeButton("Закрыть", null).create();
+
         Runnable refresh = () -> {
             list.removeAllViews(); String q = search.getText().toString();
             List<RuleItem> candidates = featCandidates(slotCategory, level, q);
             List<RowCandidate> rows = new ArrayList<>();
-            int open = 0, locked = 0;
+            int open = 0;
             for (RuleItem item : candidates) {
                 String reason = RuleEngine.blockReason(item, state, runtime, slotCategory, level);
-                if (reason == null) open++; else locked++;
-                rows.add(new RowCandidate(item, reason));
+                if (reason == null) open++;
+                if (reason == null || showLocked[0]) rows.add(new RowCandidate(item, reason));
             }
             Collections.sort(rows, (a,b) -> {
                 if ((a.reason == null) != (b.reason == null)) return a.reason == null ? -1 : 1;
@@ -313,33 +422,52 @@ public final class MainActivityV3 extends Activity {
             });
             int shown = 0;
             for (RowCandidate rc : rows) {
-                String right = "ур. " + rc.item.level + (rc.reason == null ? " • ✓" : " • 🔒 " + rc.reason);
-                TextView r = actionRow(RuNames.display(rc.item.name), right); r.setTextColor(rc.reason == null ? TEXT : MUTED);
+                String right = "ур. " + rc.item.level + (rc.reason == null ? " • доступен" : " • " + rc.reason);
+                TextView r = compactRow(rc.reason == null ? "+" : "×", RuNames.shortName(rc.item.name), right, rc.reason == null ? GOOD : BAD);
+                if (rc.reason != null) r.setTextColor(MUTED);
                 r.setOnClickListener(v -> ruleDetail(rc.item, rc.reason == null ? () -> {
                     state.setChoice(choiceKey, rc.item); dialog.dismiss(); saveAndRevalidate();
                 } : null));
                 list.addView(r); if (++shown >= 260) break;
             }
-            status.setText("Доступно: " + open + " • заблокировано: " + locked + " • показано: " + Math.min(shown, 260));
+            status.setText("Подходит по текущей сборке: " + open + (showLocked[0] ? " • показаны также недоступные" : ""));
+            if (shown == 0) list.addView(note("Нет подходящих вариантов."));
         };
+        filter.setOnClickListener(v -> {
+            showLocked[0] = !showLocked[0];
+            filter.setText("☰  Фильтр\n     " + (showLocked[0] ? "Доступные + недоступные" : "Только доступные"));
+            refresh.run();
+        });
         search.addTextChangedListener(watcher(refresh)); refresh.run(); dialog.show();
     }
 
     private List<RuleItem> featCandidates(String slot, int level, String search) {
-        List<RuleItem> out = new ArrayList<>(); Set<String> seen = new HashSet<>();
+        List<RuleItem> raw = new ArrayList<>(); Set<String> seen = new HashSet<>();
         if ("class".equals(slot)) {
             String group = RuleRuntime.slug(state.className);
-            addAll(out, seen, store.queryGroup("feat", "class", group, level, search, 400));
-            addAll(out, seen, store.queryGroup("feat", "archetype", "", level, search, 900));
+            addAll(raw, seen, store.queryGroup("feat", "class", group, level, "", 500));
+            addAll(raw, seen, store.queryGroup("feat", "archetype", "", level, "", 1100));
         } else if ("ancestry".equals(slot)) {
-            addAll(out, seen, store.bySubtype("feat", "ancestry", level, search, 900));
+            addAll(raw, seen, store.bySubtype("feat", "ancestry", level, "", 1200));
         } else if ("skill".equals(slot)) {
-            addAll(out, seen, store.bySubtype("feat", "skill", level, search, 700));
+            addAll(raw, seen, store.bySubtype("feat", "skill", level, "", 900));
         } else if ("general".equals(slot)) {
-            addAll(out, seen, store.bySubtype("feat", "general", level, search, 400));
-            addAll(out, seen, store.bySubtype("feat", "skill", level, search, 600));
+            addAll(raw, seen, store.bySubtype("feat", "general", level, "", 500));
+            addAll(raw, seen, store.bySubtype("feat", "skill", level, "", 900));
         }
+        if (search == null || search.trim().isEmpty()) return raw;
+        List<RuleItem> out = new ArrayList<>();
+        for (RuleItem item : raw) if (matches(item, search)) out.add(item);
         return out;
+    }
+
+    private boolean matches(RuleItem item, String q) {
+        if (q == null || q.trim().isEmpty()) return true;
+        String s = q.toLowerCase(Locale.ROOT).trim();
+        if (RuNames.matches(item.name, q)) return true;
+        if (item.description != null && item.description.toLowerCase(Locale.ROOT).contains(s)) return true;
+        for (String t : item.traits) if (t.toLowerCase(Locale.ROOT).contains(s)) return true;
+        return false;
     }
 
     private static void addAll(List<RuleItem> out, Set<String> seen, List<RuleItem> items) {
@@ -352,15 +480,16 @@ public final class MainActivityV3 extends Activity {
         if (!item.traits.isEmpty()) body.append("Черты: ").append(item.traitsLine()).append("\n");
         if (!item.prerequisites.isEmpty()) body.append("Требования: ").append(String.join("; ", item.prerequisites)).append("\n");
         if (!item.source.isEmpty()) body.append("Источник: ").append(item.source).append("\n");
-        JSONArray elements = item.meta.optJSONArray("ruleElements");
-        if (elements != null && elements.length() > 0) body.append("Rule Elements: ").append(elements.length()).append("\n");
         body.append("\n").append(item.description == null ? "" : item.description);
         AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle(RuNames.display(item.name)).setMessage(body.toString()).setNegativeButton("Закрыть", null);
-        if (choose != null) b.setPositiveButton("Выбрать", (d,w) -> choose.run()); b.show();
+        if (choose != null) b.setPositiveButton("Выбрать", (d,w) -> choose.run());
+        b.show();
     }
 
     private void saveAndRevalidate() {
         state.save(this);
+        StatsState.recalculate(state);
+        stats = StatsState.load(this);
         for (int pass = 0; pass < 30; pass++) {
             rebuildRuntime();
             String remove = null;
@@ -376,36 +505,105 @@ public final class MainActivityV3 extends Activity {
             if (remove == null) break;
             state.setChoice(remove, null);
         }
-        state.save(this); rebuildRuntime(); render();
+        state.save(this);
+        StatsState.recalculate(state);
+        stats = StatsState.load(this);
+        rebuildRuntime();
+        render();
     }
 
+    private int[] completion() {
+        int total = 4;
+        int done = 0;
+        if (!state.ancestry.isEmpty()) done++;
+        if (!state.choiceName("base:heritage").isEmpty()) done++;
+        if (!state.background.isEmpty()) done++;
+        if (!state.className.isEmpty()) done++;
+        RuleItem cls = classItem();
+        for (int level = 1; level <= state.level; level++) {
+            for (String slot : new String[]{"class","ancestry","skill","general"}) {
+                if (!hasFeatSlot(cls, slot, level)) continue;
+                total++;
+                if (!state.choiceName("L" + level + ":" + slot).isEmpty()) done++;
+            }
+        }
+        return new int[]{done, total};
+    }
+
+    private boolean hasFeatSlot(RuleItem cls, String slot, int level) {
+        if ("class".equals(slot)) return RuleEngine.classHasSlot(cls, "classFeatLevels", level, new int[]{1,2,4,6,8,10,12,14,16,18,20});
+        if ("ancestry".equals(slot)) return RuleEngine.classHasSlot(cls, "ancestryFeatLevels", level, new int[]{1,5,9,13,17});
+        if ("skill".equals(slot)) return RuleEngine.classHasSlot(cls, "skillFeatLevels", level, new int[]{2,4,6,8,10,12,14,16,18,20});
+        return RuleEngine.classHasSlot(cls, "generalFeatLevels", level, new int[]{3,7,11,15,19});
+    }
+
+    private static boolean isAbilityBoostLevel(int level) { return level == 1 || level == 5 || level == 10 || level == 15 || level == 20; }
     private void rebuildRuntime() { runtime = RuleRuntime.resolve(store, state, stats); }
     private RuleItem classItem() { return state.className.isEmpty() ? null : store.findExact("class", state.className); }
 
-    private static String cleanPrompt(String raw) {
-        if (raw == null || raw.isEmpty()) return "Дополнительный выбор";
-        if (raw.startsWith("PF2E.")) return "Дополнительный выбор правила";
+    private String cleanPrompt(RuleRuntime.ChoicePrompt prompt) {
+        String flag = prompt.flag == null ? "" : prompt.flag;
+        if (flag.startsWith("granAncestryBoost")) return "Повышение характеристики рода";
+        if (flag.startsWith("granBackgroundBoost")) return "Повышение характеристики предыстории";
+        if (flag.equals("granClassKey")) return "Ключевая характеристика класса";
+        if (flag.startsWith("granFree")) return "Свободное повышение характеристики";
+        if (flag.startsWith("granClassSkill")) return "Обученный навык класса";
+        if (flag.equals("fighterSkill")) return "Навык воина";
+        if (flag.toLowerCase(Locale.ROOT).contains("muse")) return "Муза барда";
+        String raw = prompt.title;
+        if (raw == null || raw.isEmpty() || raw.startsWith("PF2E.")) return "Дополнительный выбор";
         return raw;
+    }
+
+    private String selectedChoiceLabel(RuleRuntime.ChoicePrompt prompt, String selected) {
+        for (RuleRuntime.Option option : prompt.options) if (String.valueOf(option.value).equals(selected)) return choiceLabel(option);
+        return translateValue(selected);
+    }
+
+    private String choiceLabel(RuleRuntime.Option option) {
+        String label = option.label == null ? "" : option.label;
+        if (label.startsWith("PF2E.Skill.")) return skillName(label.substring("PF2E.Skill.".length()).toLowerCase(Locale.ROOT));
+        if (label.startsWith("PF2E.Ability.")) return translateValue(option.value);
+        if (!label.isEmpty() && !label.startsWith("PF2E.")) return RuNames.shortName(label);
+        return translateValue(option.value);
+    }
+
+    private String translateValue(Object raw) {
+        String value = raw == null ? "" : String.valueOf(raw);
+        switch (value.toLowerCase(Locale.ROOT)) {
+            case "str": return "Сила";
+            case "dex": return "Ловкость";
+            case "con": return "Телосложение";
+            case "int": return "Интеллект";
+            case "wis": return "Мудрость";
+            case "cha": return "Харизма";
+            default:
+                String skill = skillName(value.toLowerCase(Locale.ROOT));
+                return skill.equals(value) ? RuNames.shortName(value) : skill;
+        }
+    }
+
+    private String skillName(String key) {
+        for (String[] s : SKILLS) if (s[0].equals(key)) return s[1];
+        return key;
     }
 
     private interface Selection { void select(RuleItem item); }
     private static final class RowCandidate { final RuleItem item; final String reason; RowCandidate(RuleItem i, String r) { item=i; reason=r; } }
 
     private TextWatcher watcher(Runnable r) { return new TextWatcher() { public void beforeTextChanged(CharSequence s,int st,int c,int a){} public void onTextChanged(CharSequence s,int st,int b,int c){r.run();} public void afterTextChanged(Editable e){} }; }
-    private ScrollView scroll(View child) { ScrollView s = new ScrollView(this); s.addView(child); return s; }
-    private LinearLayout page() { LinearLayout c=column(); c.setPadding(dp(10),dp(8),dp(10),dp(24)); return c; }
+    private ScrollView scroll(View child) { ScrollView s = new ScrollView(this); s.setFillViewport(true); s.addView(child); return s; }
+    private LinearLayout page() { LinearLayout c=column(); c.setPadding(dp(8),dp(7),dp(8),dp(22)); return c; }
     private LinearLayout column() { LinearLayout l=new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private LinearLayout row() { LinearLayout l=new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); return l; }
-    private LinearLayout card() { LinearLayout l=column(); l.setPadding(dp(8),dp(6),dp(8),dp(6)); l.setBackground(round(CARD,10,BORDER)); return l; }
-    private TextView section(String s) { TextView v=text(s,14,true); v.setTextColor(ACCENT); v.setPadding(dp(5),dp(12),dp(5),dp(5)); return v; }
-    private TextView note(String s) { TextView v=text(s,12,false); v.setTextColor(MUTED); v.setPadding(dp(6),dp(5),dp(6),dp(6)); return v; }
-    private TextView staticRow(String a,String b) { return actionRow(a,b); }
-    private TextView infoRow(String a,String b,int color) { TextView v=actionRow(a,b); v.setTextColor(color); return v; }
-    private TextView actionRow(String left,String right) { TextView v=text(left + "\n" + right,14,false); v.setPadding(dp(10),dp(9),dp(10),dp(9)); v.setBackground(round(CARD_2,8,BORDER)); LinearLayout.LayoutParams p=matchWrap(dp(3)); v.setLayoutParams(p); return v; }
-    private TextView chip(String s,boolean active) { TextView v=text(s,12,true); v.setTextColor(active?Color.BLACK:TEXT); v.setPadding(dp(12),dp(8),dp(12),dp(8)); v.setBackground(round(active?ACCENT:CARD_2,18,BORDER)); return v; }
+    private LinearLayout card() { LinearLayout l=column(); l.setPadding(dp(7),dp(6),dp(7),dp(6)); l.setBackground(round(CARD,8,BORDER)); return l; }
+    private TextView section(String s) { TextView v=text(s,13,true); v.setTextColor(ACCENT); v.setPadding(dp(4),dp(9),dp(4),dp(3)); return v; }
+    private TextView note(String s) { TextView v=text(s,12,false); v.setTextColor(MUTED); v.setPadding(dp(7),dp(5),dp(7),dp(6)); return v; }
+    private TextView badge(String s,int color) { TextView v=text(s,10,true); v.setTextColor(Color.WHITE); v.setGravity(Gravity.CENTER); v.setPadding(dp(7),dp(5),dp(7),dp(5)); v.setBackground(round(color,12,color)); return v; }
+    private TextView tab(String s,boolean active) { TextView v=text(s,11,true); v.setTextColor(active?HEADER_DARK:Color.WHITE); v.setPadding(dp(11),dp(7),dp(11),dp(7)); v.setBackground(round(active?Color.rgb(242,211,183):HEADER_DARK,4,active?Color.rgb(242,211,183):Color.rgb(119,58,70))); return v; }
     private TextView text(String s,int size,boolean bold) { TextView v=new TextView(this); v.setText(s); v.setTextSize(size); v.setTextColor(TEXT); if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD); return v; }
-    private EditText input(String hint) { EditText e=new EditText(this); e.setHint(hint); e.setHintTextColor(MUTED); e.setTextColor(TEXT); e.setSingleLine(true); e.setBackground(round(CARD_2,8,BORDER)); e.setPadding(dp(10),dp(8),dp(10),dp(8)); return e; }
-    private Button mini(String s) { Button b=new Button(this); b.setText(s); b.setTextSize(18); b.setMinWidth(dp(44)); b.setMinimumHeight(0); b.setMinHeight(dp(40)); return b; }
+    private EditText input(String hint) { EditText e=new EditText(this); e.setHint(hint); e.setHintTextColor(MUTED); e.setTextColor(TEXT); e.setSingleLine(true); e.setBackground(round(CARD_2,6,BORDER)); e.setPadding(dp(10),dp(7),dp(10),dp(7)); return e; }
+    private Button mini(String s) { Button b=new Button(this); b.setText(s); b.setTextSize(17); b.setTextColor(TEXT); b.setMinWidth(dp(42)); b.setMinimumHeight(0); b.setMinHeight(dp(38)); return b; }
     private GradientDrawable round(int color,int radius,int stroke) { GradientDrawable g=new GradientDrawable(); g.setColor(color); g.setCornerRadius(dp(radius)); g.setStroke(dp(1),stroke); return g; }
     private int dp(int v) { return Math.round(v*getResources().getDisplayMetrics().density); }
     private LinearLayout.LayoutParams matchWrap() { return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); }
