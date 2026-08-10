@@ -59,32 +59,26 @@ jobs:
           assert {'group_key','rarity','remaster','source','json'} <= columns
           assert n > 15000 and classes >= 25 and feats > 6000 and spells > 1900 and equipment > 5000
           assert grouped_class > 1500 and grouped_arch > 1800 and remaster > 5000
-
           fighter = json.loads(db.execute("select json from rules where category='class' and name='Fighter'").fetchone()[0])
           assert fighter['meta']['hp'] == 10
           assert fighter['meta']['attacks']['martial'] >= 1
           assert fighter['meta']['savingThrows']['fortitude'] >= 1
           assert len(fighter['meta']['features']) >= 10
-
           wizard = json.loads(db.execute("select json from rules where category='class' and name='Wizard'").fetchone()[0])
           assert wizard['meta']['traditions'] == ['arcane']
-
           wall = json.loads(db.execute("select json from rules where category='feat' and name='Wall Jump'").fetchone()[0])
           reqs = wall['meta']['requirementsParsed']
           assert any(r.get('kind') == 'skill' and r.get('skill') == 'athletics' and r.get('rank') == 3 for r in reqs)
           assert wall['meta']['rarity'] == 'common'
           assert wall['meta']['sourcePath'].endswith('wall-jump.json')
-
           fighter_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='class' and group_key='fighter' limit 1").fetchone()[0])
           assert fighter_feat['meta']['groupKey'] == 'fighter'
           arch_feat = json.loads(db.execute("select json from rules where category='feat' and subtype='archetype' and group_key<>'' limit 1").fetchone()[0])
           assert arch_feat['meta']['groupKey']
-
           human_heritage = json.loads(db.execute("select json from rules where category='heritage' and name='Versatile Human'").fetchone()[0])
           assert human_heritage['meta']['ancestry'] == 'Human' and human_heritage['meta']['versatile'] is False
           beastkin = json.loads(db.execute("select json from rules where category='heritage' and name='Beastkin'").fetchone()[0])
           assert beastkin['meta']['versatile'] is True
-
           sword = json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
           assert sword['meta']['damageDie'] == 'd8' and sword['meta']['damageType'] == 'slashing'
           force = json.loads(db.execute("select json from rules where category='spell' and name='Force Barrage'").fetchone()[0])
@@ -126,12 +120,14 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop ru.gran.gran2e
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2
-            sleep 8
+            sleep 15
             adb shell pidof ru.gran.gran2e
             test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 500; exit 1)
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | grep 'ru.gran.edge2e.MainActivityV2'
+            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' || true
             adb shell uiautomator dump /sdcard/window-top.xml
             adb shell cat /sdcard/window-top.xml > window-top.xml
+            head -c 20000 window-top.xml || true
             grep -q 'ГРАНЬ 2e' window-top.xml
             grep -q 'ПЛАНИРОВЩИК 1–20' window-top.xml
             grep -q '17025' window-top.xml || grep -q 'база 17025' window-top.xml
