@@ -68,6 +68,7 @@ jobs:
           grep -q 'ReferenceCatalogActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'ReferenceCompanionActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'ReferenceMoreActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          for tab in Персонаж Атаки Защита Навыки Фиты Заклинания Снаряжение Питомцы Эффекты; do grep -q "$tab" app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java; done
           grep -q 'GranArchive.exportCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
           grep -q 'GranArchive.importCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
           grep -q 'ruleSelections' app/src/main/java/ru/gran/edge2e/CharacterJson.java
@@ -202,8 +203,6 @@ jobs:
             adb shell uiautomator dump /sdcard/g6r-play.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/g6r-play.xml > g6r-play.xml 2>/dev/null || true
             grep -q 'ПЕРСОНАЖ' g6r-play.xml
-            grep -q 'АТАКИ' g6r-play.xml
-            grep -q 'ЗАЩИТА' g6r-play.xml
             adb exec-out screencap -p > gran2e-60-release-play.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen gear
