@@ -1,0 +1,145 @@
+name: Gran 2e 3.4 inventory reference verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-inventory-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build rules and generated UX
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+
+      - name: Verify data and mechanics
+        run: |
+          test -s app/src/main/assets/rules.db
+          python3 - <<'PY'
+          import json,sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          backpack=json.loads(db.execute("select json from rules where category='equipment' and name='Backpack'").fetchone()[0])
+          sword=json.loads(db.execute("select json from rules where category='equipment' and name='Longsword'").fetchone()[0])
+          arrows=json.loads(db.execute("select json from rules where category='equipment' and name='Arrows'").fetchone()[0])
+          bm=backpack['meta']; sm=sword['meta']; am=arrows['meta']
+          print('Backpack',bm.get('bulkValue'),bm.get('bulkCapacity'),bm.get('bulkIgnored'),bm.get('bulkHeldOrStowed'),bm.get('stowing'))
+          print('Longsword bulk',sm.get('bulkValue'),'Arrows bulk',am.get('bulkValue'))
+          assert bm.get('bulkCapacity') == 4.0 and bm.get('bulkIgnored') == 2.0 and bm.get('bulkHeldOrStowed') == 0.1 and bm.get('stowing') is True
+          assert sm.get('bulkValue') == 1.0
+          assert am.get('bulkValue') == 0.1
+          db.close()
+          PY
+          grep -q 'int enc=Math.max(0,5+str)\*10,max=Math.max(0,10+str)\*10' app/src/main/java/ru/gran/edge2e/BulkRules.java
+          grep -q 'boolean over=capacity>0&&raw>capacity' app/src/main/java/ru/gran/edge2e/BulkRules.java
+          grep -q 'int counted=over?raw:Math.max(0,raw-ignored)' app/src/main/java/ru/gran/edge2e/BulkRules.java
+          grep -q 'containerFor' app/src/main/java/ru/gran/edge2e/InventoryState.java
+          grep -q 'КОНТЕЙНЕРЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'BulkRules.calculate' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ПОДГОТОВЛЕННЫЕ СЛОТЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'Знания писца' app/src/main/assets/ru_names.json
+          grep -q "versionName '3.4.0'" app/build.gradle
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+
+      - name: Prepare Android fixtures
+        run: |
+          cat > ci-wizard.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="state">{&quot;name&quot;:&quot;CI Wizard&quot;,&quot;className&quot;:&quot;Wizard&quot;,&quot;level&quot;:3,&quot;hp&quot;:10,&quot;maxHp&quot;:10}</string></map>
+          XML
+          cat > ci-knowledge-character.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="state">{&quot;name&quot;:&quot;CI Scholar&quot;,&quot;ancestry&quot;:&quot;Human&quot;,&quot;background&quot;:&quot;Acolyte&quot;,&quot;level&quot;:3,&quot;hp&quot;:10,&quot;maxHp&quot;:10,&quot;choices&quot;:{&quot;L2:skill&quot;:&quot;BocFD2KV0qgUC76x\u001fAdditional Lore&quot;}}</string></map>
+          XML
+          cat > ci-knowledge-state.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="state">{&quot;languages&quot;:[&quot;draconic&quot;],&quot;additionalLores&quot;:[&quot;Военная история&quot;]}</string></map>
+          XML
+          cat > ci-bulk-character.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="state">{&quot;name&quot;:&quot;CI Carrier&quot;,&quot;level&quot;:1,&quot;hp&quot;:10,&quot;maxHp&quot;:10,&quot;inventory&quot;:[&quot;3lgwjrFEsQVKzhh7\u001fBackpack&quot;,&quot;LJdbVTOZog39EEbi\u001fLongsword&quot;]}</string></map>
+          XML
+          cat > ci-bulk-normal.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="inventory">{&quot;quantities&quot;:{&quot;3lgwjrFEsQVKzhh7&quot;:1,&quot;LJdbVTOZog39EEbi&quot;:3},&quot;containers&quot;:{&quot;LJdbVTOZog39EEbi&quot;:&quot;3lgwjrFEsQVKzhh7&quot;},&quot;containerWorn&quot;:{},&quot;pp&quot;:0,&quot;gp&quot;:0,&quot;sp&quot;:0,&quot;cp&quot;:0}</string></map>
+          XML
+          cat > ci-bulk-overflow.xml <<'XML'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <map><string name="inventory">{&quot;quantities&quot;:{&quot;3lgwjrFEsQVKzhh7&quot;:1,&quot;LJdbVTOZog39EEbi&quot;:5},&quot;containers&quot;:{&quot;LJdbVTOZog39EEbi&quot;:&quot;3lgwjrFEsQVKzhh7&quot;},&quot;containerWorn&quot;:{},&quot;pp&quot;:0,&quot;gp&quot;:0,&quot;sp&quot;:0,&quot;cp&quot;:0}</string></map>
+          XML
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Exercise Bulk, containers and regressions on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash ci/device34.sh
+
+      - name: Upload verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-3.4.0-inventory-reference-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-34-bulk-normal.png
+            gran2e-34-bulk-overflow.png
+            attack34.xml
+            wizard34.xml
+            knowledge34.xml
+            bulk34-normal.xml
+            bulk34-overflow.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
