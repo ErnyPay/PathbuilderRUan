@@ -6,6 +6,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
+            android:name="ru.gran.edge2e.ReferenceBuildActivity"
+            android:exported="true"
+            android:screenOrientation="portrait" />
+        <activity
             android:name="ru.gran.edge2e.ReferencePlayActivity"
             android:exported="true"
             android:screenOrientation="portrait" />
