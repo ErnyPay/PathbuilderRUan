@@ -49,4 +49,4 @@ assert_text 'НОВЫЙ ПЕРСОНАЖ' '''
 
 s=s[:start]+new+s[end:]
 TEST.write_text(s,encoding='utf-8')
-print('Gran 2e 8.1 E2E version, compact labels and launcher recovery applied')
+print('Gran 2e 8.1 E2E version and launcher recovery applied; compact picker labels normalized')
