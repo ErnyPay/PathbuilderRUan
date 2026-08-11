@@ -1,4 +1,4 @@
-name: Gran 2e 4.2 reference PLAY verification
+name: Gran 2e 5.0 reference shell verification
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
 
       - name: Build rules, Russian corpus and reference UX
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/build_wizard_4_1.py scripts/reference_play_4_2.py scripts/pf2ru_3_5.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/build_wizard_4_1.py scripts/reference_play_4_2.py scripts/pf2ru_3_5.py scripts/reference_shell_5_0.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -51,18 +51,25 @@ jobs:
           python3 scripts/build_wizard_4_1.py
           python3 scripts/reference_play_4_2.py
           python3 scripts/pf2ru_3_5.py
+          python3 scripts/reference_shell_5_0.py
 
-      - name: Verify reference BUILD, PLAY structure and Russian corpus
+      - name: Verify reference shell and Russian corpus
         run: |
           test -s app/src/main/assets/rules.db
           test -s app/src/main/assets/ru_names.json
           test -s app/src/main/assets/ru_text.json
           test -s app/src/main/assets/pf2ru_source.json
+          grep -q 'ReferenceBuildActivity' app/src/main/AndroidManifest.xml
           grep -q 'ReferencePlayActivity' app/src/main/AndroidManifest.xml
+          grep -q 'ReferenceBuildActivity.class' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
           grep -q 'ReferencePlayActivity.class' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
-          grep -q 'ReferencePlayActivity.class' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
-          grep -q 'СОЗДАНИЕ ПЕРСОНАЖА' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
-          grep -q 'baseCandidates(String category)' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
+          grep -q 'ReferenceBuildActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'УРОВНИ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ОСНОВА ПЕРСОНАЖА' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ВЫБОР РОДА' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ВЫБОР ПРЕДЫСТОРИИ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ВЫБОР КЛАССА' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ФИТЫ И ОСОБЕННОСТИ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
           grep -q 'Персонаж' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'Атаки' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'Защита' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
@@ -72,10 +79,7 @@ jobs:
           grep -q 'Снаряжение' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'Питомцы' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'Эффекты' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
-          grep -q 'ИСПОЛЬЗОВАТЬ СЛОТ' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
-          grep -q 'КОНТЕЙНЕРЫ' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
-          grep -q 'Животный-компаньон' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
-          grep -q "versionName '4.2.0'" app/build.gradle
+          grep -q "versionName '5.0.0'" app/build.gradle
           python3 - <<'PY'
           import json, sqlite3
           source=json.load(open('app/src/main/assets/pf2ru_source.json',encoding='utf-8'))
@@ -107,7 +111,7 @@ jobs:
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Exercise BUILD and reference PLAY pages on Android 35
+      - name: Exercise Gran 5.0 reference shell on Android 35
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -118,82 +122,67 @@ jobs:
           script: |
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=4.2.0'
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=5.0.0'
 
             adb shell am force-stop ru.gran.gran2e
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.FrontPageActivity
             sleep 5
             test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || { adb logcat -d -v time | tail -n 900; exit 1; }
-            adb shell uiautomator dump /sdcard/gran42-front.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-front.xml > gran42-front.xml 2>/dev/null || true
-            grep -q 'НОВЫЙ ПЕРСОНАЖ' gran42-front.xml
-            adb exec-out screencap -p > gran2e-42-front.png
+            adb shell uiautomator dump /sdcard/gran50-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran50-front.xml > gran50-front.xml 2>/dev/null || true
+            grep -q 'НОВЫЙ ПЕРСОНАЖ' gran50-front.xml
+            adb exec-out screencap -p > gran2e-50-front.png
 
-            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
-            sleep 4
-            adb shell uiautomator dump /sdcard/gran42-build.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-build.xml > gran42-build.xml 2>/dev/null || true
-            grep -q 'СОЗДАНИЕ ПЕРСОНАЖА' gran42-build.xml
-            grep -q 'Род' gran42-build.xml
-            grep -q 'Наследие' gran42-build.xml
-            adb exec-out screencap -p > gran2e-42-build.png
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceBuildActivity
+            sleep 5
+            adb shell uiautomator dump /sdcard/gran50-build.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran50-build.xml > gran50-build.xml 2>/dev/null || true
+            grep -q 'СБОРКА' gran50-build.xml
+            grep -q 'УРОВНИ' gran50-build.xml
+            grep -q 'ОСНОВА ПЕРСОНАЖА' gran50-build.xml
+            grep -q 'РОД' gran50-build.xml
+            grep -q 'НАСЛЕДИЕ' gran50-build.xml
+            grep -q 'ПРЕДЫСТОРИЯ' gran50-build.xml
+            grep -q 'КЛАСС' gran50-build.xml
+            adb exec-out screencap -p > gran2e-50-build.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen character
             sleep 4
-            adb shell uiautomator dump /sdcard/gran42-character.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-character.xml > gran42-character.xml 2>/dev/null || true
-            grep -q 'ПЕРСОНАЖ' gran42-character.xml
-            grep -q 'ХАРАКТЕРИСТИКИ' gran42-character.xml
-            grep -q 'СПАСБРОСКИ И ВОСПРИЯТИЕ' gran42-character.xml
-            adb exec-out screencap -p > gran2e-42-character.png
+            adb shell uiautomator dump /sdcard/gran50-character.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran50-character.xml > gran50-character.xml 2>/dev/null || true
+            grep -q 'ПЕРСОНАЖ' gran50-character.xml
+            grep -q 'ХАРАКТЕРИСТИКИ' gran50-character.xml
+            grep -q 'СПАСБРОСКИ И ВОСПРИЯТИЕ' gran50-character.xml
+            adb exec-out screencap -p > gran2e-50-character.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen attacks
             sleep 3
-            adb shell uiautomator dump /sdcard/gran42-attacks.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-attacks.xml > gran42-attacks.xml 2>/dev/null || true
-            grep -q 'АТАКИ' gran42-attacks.xml
-            grep -q 'БОЕВЫЕ ПАРАМЕТРЫ' gran42-attacks.xml
-            adb exec-out screencap -p > gran2e-42-attacks.png
-
-            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen defenses
-            sleep 3
-            adb shell uiautomator dump /sdcard/gran42-defenses.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-defenses.xml > gran42-defenses.xml 2>/dev/null || true
-            grep -q 'ЗАЩИТА' gran42-defenses.xml
-            grep -q 'БРОНЯ' gran42-defenses.xml
-            grep -q 'ЩИТ' gran42-defenses.xml
-            adb exec-out screencap -p > gran2e-42-defenses.png
+            adb shell uiautomator dump /sdcard/gran50-attacks.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran50-attacks.xml > gran50-attacks.xml 2>/dev/null || true
+            grep -q 'АТАКИ' gran50-attacks.xml
+            grep -q 'БОЕВЫЕ ПАРАМЕТРЫ' gran50-attacks.xml
+            adb exec-out screencap -p > gran2e-50-attacks.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen gear
             sleep 3
-            adb shell uiautomator dump /sdcard/gran42-gear.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-gear.xml > gran42-gear.xml 2>/dev/null || true
-            grep -q 'СНАРЯЖЕНИЕ' gran42-gear.xml
-            grep -q 'ОСНОВНОЙ ИНВЕНТАРЬ' gran42-gear.xml
-            adb exec-out screencap -p > gran2e-42-gear.png
+            adb shell uiautomator dump /sdcard/gran50-gear.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran50-gear.xml > gran50-gear.xml 2>/dev/null || true
+            grep -q 'СНАРЯЖЕНИЕ' gran50-gear.xml
+            grep -q 'ОСНОВНОЙ ИНВЕНТАРЬ' gran50-gear.xml
+            adb exec-out screencap -p > gran2e-50-gear.png
 
-            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen pets
-            sleep 3
-            adb shell uiautomator dump /sdcard/gran42-pets.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran42-pets.xml > gran42-pets.xml 2>/dev/null || true
-            grep -q 'ПИТОМЦЫ' gran42-pets.xml
-            grep -q 'ЖИВОТНЫЙ-КОМПАНЬОН' gran42-pets.xml
-            adb exec-out screencap -p > gran2e-42-pets.png
-
-      - name: Upload verified Gran 2e 4.2 APK
+      - name: Upload verified Gran 2e 5.0 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-4.2.0-reference-play-verified
+          name: Gran2e-5.0.0-reference-shell-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
-            gran2e-42-front.png
-            gran2e-42-build.png
-            gran2e-42-character.png
-            gran2e-42-attacks.png
-            gran2e-42-defenses.png
-            gran2e-42-gear.png
-            gran2e-42-pets.png
-            gran42-*.xml
+            gran2e-50-front.png
+            gran2e-50-build.png
+            gran2e-50-character.png
+            gran2e-50-attacks.png
+            gran2e-50-gear.png
+            gran50-*.xml
             ci-tools/apksigner.jar
           if-no-files-found: error
           retention-days: 30
