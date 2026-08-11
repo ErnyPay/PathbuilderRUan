@@ -30,6 +30,10 @@ public final class RuleStore extends SQLiteOpenHelper {
     private RuleStore(Context context, String ignored) {
         super(context, DB, null, VERSION);
         this.context = context;
+        // Every rule-driven screen is Russian-first. Loading here guarantees that
+        // catalogs, BUILD, PLAY and detail dialogs all share the complete generated
+        // ru_names/ru_text corpus instead of falling back to the tiny core map.
+        RuNames.init(context);
     }
 
     private static String prepareDatabase(Context context) {
@@ -78,26 +82,12 @@ public final class RuleStore extends SQLiteOpenHelper {
         try { stream = context.getAssets().open("seed_rules.jsonl"); }
         catch (Exception e) { return; }
         db.beginTransaction();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
-            ContentValues v = new ContentValues();
-            while ((line = r.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
                 JSONObject o = new JSONObject(line);
-                JSONObject meta = o.optJSONObject("meta");
-                v.clear();
-                v.put("id", o.optString("id"));
-                v.put("name", o.optString("name"));
-                v.put("category", o.optString("category"));
-                v.put("subtype", o.optString("subtype"));
-                v.put("level", o.optInt("level", 0));
-                v.put("group_key", meta == null ? "" : meta.optString("groupKey", ""));
-                v.put("rarity", meta == null ? "common" : meta.optString("rarity", "common"));
-                v.put("remaster", meta != null && meta.optBoolean("remaster", false) ? 1 : 0);
-                v.put("source", o.optString("source", ""));
-                v.put("json", line);
-                db.insertWithOnConflict("rules", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+                insertRule(db, o);
             }
             db.setTransactionSuccessful();
         } catch (Exception ignored) {
@@ -106,151 +96,110 @@ public final class RuleStore extends SQLiteOpenHelper {
         }
     }
 
-    public int count() {
-        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules", null)) {
-            return c.moveToFirst() ? c.getInt(0) : 0;
-        }
+    private void insertRule(SQLiteDatabase db, JSONObject o) {
+        ContentValues values = new ContentValues();
+        values.put("id", o.optString("id"));
+        values.put("name", o.optString("name"));
+        values.put("category", o.optString("category"));
+        values.put("subtype", o.optString("subtype"));
+        values.put("level", o.optInt("level", 0));
+        values.put("group_key", o.optString("group"));
+        values.put("rarity", o.optString("rarity"));
+        values.put("remaster", o.optBoolean("remaster", false) ? 1 : 0);
+        values.put("source", o.optString("source"));
+        values.put("json", o.toString());
+        db.insertWithOnConflict("rules", null, values, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
-    public int countCategory(String category) {
-        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules WHERE category=?", new String[]{category})) {
-            return c.moveToFirst() ? c.getInt(0) : 0;
+    public List<RuleItem> query(String category, int maxLevel, String text, int limit) {
+        ArrayList<RuleItem> out = new ArrayList<>();
+        SQLiteDatabase db = getReadableDatabase();
+        String q = text == null ? "" : text.trim();
+        StringBuilder where = new StringBuilder("level<=?");
+        ArrayList<String> args = new ArrayList<>();
+        args.add(String.valueOf(Math.max(0, maxLevel)));
+        if (category != null && !category.trim().isEmpty() && !"all".equalsIgnoreCase(category)) {
+            where.append(" AND category=?");
+            args.add(category.trim());
         }
+        if (!q.isEmpty()) {
+            where.append(" AND name LIKE ?");
+            args.add("%" + q + "%");
+        }
+        try (Cursor c = db.query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC,name COLLATE NOCASE ASC", String.valueOf(Math.max(1, limit)))) {
+            while (c.moveToNext()) out.add(RuleItem.fromJson(new JSONObject(c.getString(0))));
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    public List<RuleItem> bySubtype(String category, String subtype, int maxLevel, String text, int limit) {
+        ArrayList<RuleItem> out = new ArrayList<>();
+        SQLiteDatabase db = getReadableDatabase();
+        String q = text == null ? "" : text.trim();
+        StringBuilder where = new StringBuilder("category=? AND subtype=? AND level<=?");
+        ArrayList<String> args = new ArrayList<>();
+        args.add(category); args.add(subtype); args.add(String.valueOf(Math.max(0, maxLevel)));
+        if (!q.isEmpty()) { where.append(" AND name LIKE ?"); args.add("%" + q + "%"); }
+        try (Cursor c = db.query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC,name COLLATE NOCASE ASC", String.valueOf(Math.max(1, limit)))) {
+            while (c.moveToNext()) out.add(RuleItem.fromJson(new JSONObject(c.getString(0))));
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    public List<RuleItem> queryGroup(String category, String subtype, String group, int maxLevel, String text, int limit) {
+        ArrayList<RuleItem> out = new ArrayList<>();
+        SQLiteDatabase db = getReadableDatabase();
+        String q = text == null ? "" : text.trim();
+        StringBuilder where = new StringBuilder("category=? AND subtype=? AND level<=?");
+        ArrayList<String> args = new ArrayList<>();
+        args.add(category); args.add(subtype); args.add(String.valueOf(Math.max(0, maxLevel)));
+        if (group != null && !group.trim().isEmpty()) { where.append(" AND group_key=?"); args.add(group.trim()); }
+        if (!q.isEmpty()) { where.append(" AND name LIKE ?"); args.add("%" + q + "%"); }
+        try (Cursor c = db.query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC,name COLLATE NOCASE ASC", String.valueOf(Math.max(1, limit)))) {
+            while (c.moveToNext()) out.add(RuleItem.fromJson(new JSONObject(c.getString(0))));
+        } catch (Exception ignored) { }
+        return out;
     }
 
     public RuleItem findById(String id) {
         if (id == null || id.isEmpty()) return null;
         try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, "id=?", new String[]{id}, null, null, null, "1")) {
-            if (c.moveToFirst()) return parse(c.getString(0));
-        }
+            if (c.moveToFirst()) return RuleItem.fromJson(new JSONObject(c.getString(0)));
+        } catch (Exception ignored) { }
         return null;
     }
 
     public RuleItem findExact(String category, String name) {
         if (name == null || name.isEmpty()) return null;
-        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, "category=? AND name=? COLLATE NOCASE", new String[]{category, name}, null, null, null, "1")) {
-            if (c.moveToFirst()) return parse(c.getString(0));
-        }
+        String where = category == null || category.isEmpty() ? "name=? COLLATE NOCASE" : "category=? AND name=? COLLATE NOCASE";
+        String[] args = category == null || category.isEmpty() ? new String[]{name} : new String[]{category, name};
+        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where, args, null, null, null, "1")) {
+            if (c.moveToFirst()) return RuleItem.fromJson(new JSONObject(c.getString(0)));
+        } catch (Exception ignored) { }
         return null;
     }
 
-    /** Finds a named rules object when a GrantItem UUID does not carry a usable local id. */
-    public RuleItem findAnyExact(String name) {
-        if (name == null || name.isEmpty()) return null;
-        String order = "CASE category WHEN 'class-feature' THEN 0 WHEN 'feat' THEN 1 WHEN 'action' THEN 2 WHEN 'spell' THEN 3 WHEN 'condition' THEN 4 ELSE 5 END, level ASC";
-        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, "name=? COLLATE NOCASE", new String[]{name}, null, null, order, "1")) {
-            if (c.moveToFirst()) return parse(c.getString(0));
-        }
-        return null;
-    }
+    public RuleItem findAnyExact(String name) { return findExact(null, name); }
 
-    /** Resolve common Foundry UUID forms used by GrantItem and class/background feature lists. */
     public RuleItem findFromUuid(String uuid) {
         if (uuid == null || uuid.isEmpty()) return null;
-        String value = uuid.trim();
-        int marker = value.lastIndexOf(".Item.");
-        String token = marker >= 0 ? value.substring(marker + 6) : value;
-        token = token.replace("%20", " ");
-        RuleItem byId = findById(token);
+        int dot = uuid.lastIndexOf('.');
+        String tail = dot >= 0 ? uuid.substring(dot + 1) : uuid;
+        RuleItem byId = findById(tail);
         if (byId != null) return byId;
-        RuleItem byName = findAnyExact(token);
-        if (byName != null) return byName;
-        // A small number of source UUIDs end with a slug rather than an id/name.
-        String wanted = token.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
-        try (Cursor c = getReadableDatabase().rawQuery("SELECT json FROM rules WHERE lower(replace(name,' ','-'))=? LIMIT 1", new String[]{wanted})) {
-            if (c.moveToFirst()) return parse(c.getString(0));
-        }
-        return null;
+        return findAnyExact(tail.replace('-', ' '));
     }
 
-    public List<RuleItem> query(String category, int maxLevel, String search, int limit) {
-        List<RuleItem> out = new ArrayList<>();
-        CharacterState character = CharacterState.load(context);
-        boolean heritageContext = "heritage".equals(category);
-        boolean spellContext = "spell".equals(category);
-        String spellTradition = fixedTraditionFor(character.className);
-        int rawLimit = (heritageContext || (spellContext && spellTradition != null)) ? Math.max(limit * 6, 1200) : limit;
-
-        StringBuilder where = new StringBuilder("level<=?");
-        List<String> args = new ArrayList<>();
-        args.add(String.valueOf(maxLevel));
-        if (category != null && !category.isEmpty() && !"all".equals(category)) {
-            where.append(" AND category=?");
-            args.add(category);
-        }
-        if (search != null && !search.trim().isEmpty()) {
-            where.append(" AND name LIKE ? COLLATE NOCASE");
-            args.add("%" + search.trim() + "%");
-        }
-        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC, name COLLATE NOCASE ASC", String.valueOf(rawLimit))) {
-            while (c.moveToNext()) {
-                RuleItem item = parse(c.getString(0));
-                if (item == null) continue;
-                if (heritageContext && !heritageAllowed(item, character)) continue;
-                if (spellContext && spellTradition != null && !spellHasTradition(item, spellTradition)) continue;
-                out.add(item);
-                if (out.size() >= limit) break;
-            }
-        }
-        return out;
+    public int countCategory(String category) {
+        if (category == null || category.isEmpty()) return 0;
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules WHERE category=?", new String[]{category})) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        } catch (Exception ignored) { return 0; }
     }
 
-    public List<RuleItem> queryGroup(String category, String subtype, String groupKey, int maxLevel, String search, int limit) {
-        List<RuleItem> out = new ArrayList<>();
-        StringBuilder where = new StringBuilder("level<=?");
-        List<String> args = new ArrayList<>();
-        args.add(String.valueOf(maxLevel));
-        if (category != null && !category.isEmpty()) { where.append(" AND category=?"); args.add(category); }
-        if (subtype != null && !subtype.isEmpty()) { where.append(" AND subtype=?"); args.add(subtype); }
-        if (groupKey != null && !groupKey.isEmpty()) { where.append(" AND group_key=?"); args.add(groupKey); }
-        if (search != null && !search.trim().isEmpty()) { where.append(" AND name LIKE ? COLLATE NOCASE"); args.add("%" + search.trim() + "%"); }
-        try (Cursor c = getReadableDatabase().query("rules", new String[]{"json"}, where.toString(), args.toArray(new String[0]), null, null, "level ASC, name COLLATE NOCASE ASC", String.valueOf(limit))) {
-            while (c.moveToNext()) {
-                RuleItem item = parse(c.getString(0));
-                if (item != null) out.add(item);
-            }
-        }
-        return out;
-    }
-
-    private boolean heritageAllowed(RuleItem item, CharacterState character) {
-        if (character.ancestry == null || character.ancestry.isEmpty()) return false;
-        if (item.meta.optBoolean("versatile", false)) return true;
-        String ancestry = item.meta.optString("ancestry", "");
-        return !ancestry.isEmpty() && ancestry.equalsIgnoreCase(character.ancestry);
-    }
-
-    private boolean spellHasTradition(RuleItem item, String tradition) {
-        JSONArray traditions = item.meta.optJSONArray("traditions");
-        if (traditions == null) return false;
-        for (int i = 0; i < traditions.length(); i++) {
-            if (tradition.equalsIgnoreCase(traditions.optString(i))) return true;
-        }
-        return false;
-    }
-
-    private String fixedTraditionFor(String className) {
-        if (className == null) return null;
-        RuleItem cls = findExact("class", className);
-        if (cls == null) return null;
-        JSONArray traditions = cls.meta.optJSONArray("traditions");
-        if (traditions == null || traditions.length() != 1) return null;
-        String value = traditions.optString(0, "");
-        return value.isEmpty() ? null : value;
-    }
-
-    public List<RuleItem> bySubtype(String category, String subtype, int maxLevel, String search, int limit) {
-        List<RuleItem> base = query(category, maxLevel, search, Math.max(limit * 3, limit));
-        List<RuleItem> out = new ArrayList<>();
-        for (RuleItem item : base) {
-            if (subtype == null || subtype.isEmpty() || subtype.equalsIgnoreCase(item.subtype)) out.add(item);
-            if (out.size() >= limit) break;
-        }
-        return out;
-    }
-
-    private RuleItem parse(String raw) {
-        try { return RuleItem.fromJson(new JSONObject(raw)); }
-        catch (Exception ignored) { return null; }
+    public int countAll() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules", null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        } catch (Exception ignored) { return 0; }
     }
 }
