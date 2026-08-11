@@ -1,0 +1,127 @@
+name: Gran 2e 3.5 PF2.RU reference verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-pf2ru-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build rules, Russian corpus and PF2.RU bridge
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/pf2ru_3_5.py
+
+      - name: Verify PF2.RU integration and regressions
+        run: |
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          test -s app/src/main/assets/pf2ru_source.json
+          grep -q 'PF2.RU — текст и правила' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'private void openPf2Ru(RuleItem item)' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'https://pf2.ru/search?q=' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'КОНТЕЙНЕРЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ПОДГОТОВЛЕННЫЕ СЛОТЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q "versionName '3.5.0'" app/build.gradle
+          python3 - <<'PY'
+          import json, sqlite3
+          source=json.load(open('app/src/main/assets/pf2ru_source.json',encoding='utf-8'))
+          assert source['name']=='PF2.RU'
+          assert source['networkScraping'] is False
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          count=0
+          for (raw,) in db.execute('select json from rules'):
+              if 'pf2ruUrl' in json.loads(raw).get('meta',{}): count += 1
+          print('PF2.RU exact links in local corpus:',count)
+          assert count >= 1
+          db.close()
+          PY
+
+      - name: Build installable APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK signature and assets
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/pf2ru_source.json'
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Launch BUILD and PLAY shell on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=3.5.0'
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
+            sleep 10
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || { adb logcat -d -v time | tail -n 900; exit 1; }
+            adb shell uiautomator dump /sdcard/gran35.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran35.xml > gran35.xml 2>/dev/null || true
+            grep -q 'СБОРКА' gran35.xml
+            grep -q 'ИГРА' gran35.xml
+            adb exec-out screencap -p > gran2e-35-build-play.png
+
+      - name: Upload verified Gran 2e 3.5 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-3.5.0-pf2ru-reference-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-35-build-play.png
+            gran35.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
