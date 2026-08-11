@@ -147,7 +147,7 @@ public final class FrontPageActivity extends Activity {
 
     private void openPlay(String id) {
         if (!CharacterProfiles.load(this, id)) return;
-        Intent i = new Intent(this, MainActivityV2.class); i.putExtra("screen", "sheet"); startActivity(i);
+        Intent i = new Intent(this, ReferencePlayActivity.class); i.putExtra("screen", "character"); startActivity(i);
     }
 
     private LinearLayout card() {
