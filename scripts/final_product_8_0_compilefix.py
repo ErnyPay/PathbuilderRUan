@@ -118,6 +118,18 @@ def main():
     replace(PLAY,
             'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));',
             'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setContentDescription("play-tab-" + target);\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));')
+    # The top PLAY header is persistent while pages are re-rendered. Keep the level
+    # navigator bound to the reloaded CharacterState too, so archive import or other
+    # external state changes cannot leave a stale "УРОВЕНЬ N" label behind.
+    replace(PLAY,
+            'private TextView headerStats;',
+            'private TextView headerStats;\n    private TextView levelLabel;')
+    replace(PLAY,
+            'TextView levelLabel = text("УРОВЕНЬ " + state.level, 10, true); levelLabel.setTextColor(Color.rgb(236,205,169)); levelLabel.setGravity(Gravity.CENTER); levelLine.addView(levelLabel, new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));',
+            'levelLabel = text("УРОВЕНЬ " + state.level, 10, true); levelLabel.setTextColor(Color.rgb(236,205,169)); levelLabel.setGravity(Gravity.CENTER); levelLine.addView(levelLabel, new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));')
+    replace(PLAY,
+            'headerStats.setText("ур. " + state.level + " • " + cls + " • ОЗ " + state.hp + "/" + state.maxHp + " • КД " + state.ac);',
+            'headerStats.setText("ур. " + state.level + " • " + cls + " • ОЗ " + state.hp + "/" + state.maxHp + " • КД " + state.ac);\n        if (levelLabel != null) levelLabel.setText("УРОВЕНЬ " + state.level);')
     # A full Gran archive is large. Without a max line count the multiline editor
     # expands to the entire JSON and pushes the visible import action below the
     # AlertDialog viewport. Keep the editor scrollable and the confirm action visible.
@@ -126,6 +138,6 @@ def main():
             'e.setSingleLine(false);e.setMinLines(6);e.setMaxLines(10);e.setVerticalScrollBarEnabled(true);e.setText(raw);')
     runpy.run_path(str(ROOT/'scripts/final_product_8_0_e2efix.py'),run_name='__main__')
     patch_e2e()
-    print('Gran 2e 8.0 Java compatibility, archive import layout and robust E2E reads applied')
+    print('Gran 2e 8.0 Java compatibility, live PLAY level sync, archive import layout and robust E2E reads applied')
 
 if __name__=='__main__': main()
