@@ -21,13 +21,23 @@ def arr(value):
     return [str(x) for x in value] if isinstance(value,list) else []
 
 
+def load_object(path):
+    try:
+        doc=json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+    return doc if isinstance(doc,dict) else None
+
+
 def main():
     if not DB.exists(): raise SystemExit('rules.db missing')
-    db=sqlite3.connect(DB); ancestries=feats=0
+    db=sqlite3.connect(DB); ancestries=feats=skipped_non_objects=0
     try:
         for path in (CACHE/'ancestries').rglob('*.json'):
-            try: doc=json.loads(path.read_text(encoding='utf-8'))
-            except Exception: continue
+            doc=load_object(path)
+            if doc is None:
+                skipped_non_objects+=1
+                continue
             ident=str(doc.get('_id') or ''); system=doc.get('system') or {}; extra=system.get('additionalLanguages') or {}
             if not ident or not isinstance(extra,dict):continue
             choices=arr(extra.get('value'))
@@ -37,8 +47,10 @@ def main():
             ancestries+=int(update(db,ident,mutate))
 
         for path in (CACHE/'feats').rglob('*.json'):
-            try: doc=json.loads(path.read_text(encoding='utf-8'))
-            except Exception: continue
+            doc=load_object(path)
+            if doc is None:
+                skipped_non_objects+=1
+                continue
             ident=str(doc.get('_id') or ''); system=doc.get('system') or {}; sub=system.get('subfeatures') or {}
             langs=sub.get('languages') if isinstance(sub,dict) else None
             if not ident or not isinstance(langs,dict):continue
@@ -49,7 +61,7 @@ def main():
             feats+=int(update(db,ident,mutate))
         db.commit()
     finally: db.close()
-    print('Knowledge enrichment: ancestries',ancestries,'feats with language subfeatures',feats)
+    print('Knowledge enrichment: ancestries',ancestries,'feats with language subfeatures',feats,'skipped non-object JSON',skipped_non_objects)
     if ancestries < 40: raise SystemExit('Ancestry language enrichment incomplete')
 
 if __name__=='__main__':main()
