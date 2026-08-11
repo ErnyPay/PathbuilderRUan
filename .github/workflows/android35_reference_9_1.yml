@@ -99,6 +99,17 @@ jobs:
           cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci/tools/apksigner.jar
           sha256sum "$APK" > ci/apk.sha256
 
+      - name: Upload Gran 9.1 preview APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-9.1.0-preview
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            ci/apksigner.txt
+            ci/apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
@@ -113,9 +124,10 @@ jobs:
           script: bash ci/final_product_e2e.sh
 
       - name: Upload Gran 9.1 verified APK and screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-9.1.0-specialized-reference-pages-e2e-verified
+          name: Gran2e-9.1.0-specialized-reference-pages-e2e-result
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             ci/e2e/*.png
@@ -124,5 +136,5 @@ jobs:
             ci/apksigner.txt
             ci/apk.sha256
             ci/tools/apksigner.jar
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
