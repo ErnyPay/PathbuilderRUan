@@ -16,7 +16,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Pack source tree
         run: |
-          tar --exclude=.git --exclude=build --exclude=app/build -czf Gran-source-final-product.tar.gz .
+          tar --exclude=.git --exclude=build --exclude=app/build -czf /tmp/Gran-source-final-product.tar.gz .
+          cp /tmp/Gran-source-final-product.tar.gz Gran-source-final-product.tar.gz
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
