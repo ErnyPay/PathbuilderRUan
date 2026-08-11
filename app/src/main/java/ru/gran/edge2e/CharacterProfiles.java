@@ -12,7 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
-/** Multiple local character saves. Each profile snapshots character, stats and inventory JSON. */
+/** Multiple local character saves. Each profile snapshots all mutable PLAY/BUILD state. */
 public final class CharacterProfiles {
     private static final String PREFS = "gran2e_profiles_v3";
     private static final String KEY = "profiles";
@@ -66,6 +66,7 @@ public final class CharacterProfiles {
             p.put("stats", raw(context, "gran2e_stats_v2", "stats", new StatsState().toJson().toString()));
             p.put("inventory", raw(context, "gran2e_inventory_v2", "inventory", new InventoryState().toJson().toString()));
             p.put("companions", raw(context, "gran2e_companions_v3", "state", "{}"));
+            p.put("spellcasting", raw(context, SpellcastingState.PREFS, SpellcastingState.KEY, "{}"));
             p.put("savedAt", System.currentTimeMillis());
             root.put(id, p);
             prefs(context).edit().putString(KEY, root.toString()).putString(ACTIVE, id).apply();
@@ -74,13 +75,13 @@ public final class CharacterProfiles {
 
     public static boolean load(Context context, String id) {
         if (id == null || id.isEmpty()) return false;
-        // Snapshot whatever was open before switching.
         String old = activeId(context); if (old != null && !old.isEmpty() && !old.equals(id)) saveCurrentAs(context, old);
         JSONObject p = readRoot(context).optJSONObject(id); if (p == null) return false;
         write(context, "gran2e_character", "state", p.optString("character", "{}"));
         write(context, "gran2e_stats_v2", "stats", p.optString("stats", "{}"));
         write(context, "gran2e_inventory_v2", "inventory", p.optString("inventory", "{}"));
         write(context, "gran2e_companions_v3", "state", p.optString("companions", "{}"));
+        write(context, SpellcastingState.PREFS, SpellcastingState.KEY, p.optString("spellcasting", "{}"));
         prefs(context).edit().putString(ACTIVE, id).apply();
         RuntimeBridge.invalidate();
         return true;
@@ -92,6 +93,7 @@ public final class CharacterProfiles {
         StatsState s = new StatsState(); s.save(context);
         InventoryState i = new InventoryState(); i.save(context);
         context.getSharedPreferences("gran2e_companions_v3", Context.MODE_PRIVATE).edit().clear().apply();
+        context.getSharedPreferences(SpellcastingState.PREFS, Context.MODE_PRIVATE).edit().clear().apply();
         String id = UUID.randomUUID().toString(); prefs(context).edit().putString(ACTIVE, id).apply(); saveCurrentAs(context, id);
         RuntimeBridge.invalidate(); return id;
     }
