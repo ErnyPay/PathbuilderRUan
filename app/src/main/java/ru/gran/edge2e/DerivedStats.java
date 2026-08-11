@@ -54,7 +54,7 @@ public final class DerivedStats {
             category = armor.meta.optString("itemCategory", "unarmored");
             armorBonus = armor.meta.optInt("acBonus", 0);
             dexCap = armor.meta.optInt("dexCap", 99);
-            potency = armor.meta.optInt("potency", 0);
+            potency = s == null ? armor.meta.optInt("potency", 0) : ItemMods.potency(s.context(), armor);
         }
         int baseRank = classMapRank(cls, "defenses", category, 0);
         RuleRuntime.Snapshot runtime = RuntimeBridge.snapshot(c, s);
@@ -101,13 +101,14 @@ public final class DerivedStats {
         int ability = ranged ? s.ability("dex") : s.ability("str");
         if (!ranged && hasTrait(weapon, "finesse")) ability = Math.max(s.ability("str"), s.ability("dex"));
         int modifier = runtime == null ? 0 : runtime.modifier("attack");
-        return ability + proficiency(rank, c.level) + weapon.meta.optInt("potency", 0) + weapon.meta.optInt("bonus", 0) + modifier;
+        int potency = ItemMods.potency(s.context(), weapon);
+        return ability + proficiency(rank, c.level) + potency + weapon.meta.optInt("bonus", 0) + modifier;
     }
 
     public static String damage(StatsState s, RuleItem weapon) {
         if (weapon == null) return "—";
         int baseDice = Math.max(1, weapon.meta.optInt("damageDice", 1));
-        int striking = Math.max(0, weapon.meta.optInt("striking", 0));
+        int striking = ItemMods.striking(s == null ? null : s.context(), weapon);
         int dice = baseDice * (striking + 1);
         String die = weapon.meta.optString("damageDie", "d4");
         int mod = weapon.meta.optInt("bonusDamage", 0);
