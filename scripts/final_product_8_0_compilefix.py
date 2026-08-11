@@ -5,6 +5,7 @@ import runpy
 ROOT=Path(__file__).resolve().parents[1]
 SETUP=ROOT/'app/src/main/java/ru/gran/edge2e/CharacterSetupActivity.java'
 PLAY=ROOT/'app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java'
+MORE=ROOT/'app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java'
 TEST=ROOT/'ci/final_product_e2e.sh'
 
 def replace(path, old, new):
@@ -117,8 +118,14 @@ def main():
     replace(PLAY,
             'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));',
             'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setContentDescription("play-tab-" + target);\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));')
+    # A full Gran archive is large. Without a max line count the multiline editor
+    # expands to the entire JSON and pushes the visible import action below the
+    # AlertDialog viewport. Keep the editor scrollable and the confirm action visible.
+    replace(MORE,
+            'e.setSingleLine(false);e.setMinLines(8);e.setText(raw);',
+            'e.setSingleLine(false);e.setMinLines(6);e.setMaxLines(10);e.setVerticalScrollBarEnabled(true);e.setText(raw);')
     runpy.run_path(str(ROOT/'scripts/final_product_8_0_e2efix.py'),run_name='__main__')
     patch_e2e()
-    print('Gran 2e 8.0 Java compatibility, PLAY identity and robust E2E reads applied')
+    print('Gran 2e 8.0 Java compatibility, archive import layout and robust E2E reads applied')
 
 if __name__=='__main__': main()
