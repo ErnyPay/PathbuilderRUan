@@ -110,6 +110,15 @@ PY
 }
 '''
     s=s[:start]+robust_text_desc+'\n'+s[end:]
+
+    # HP persistence is an HP assertion, not a full-header assertion. The old test
+    # compared the whole status line, so a legitimate AC change after equipping armor
+    # made a correctly restored archive look broken. Extract current/max HP only.
+    hp_expr="$(first_text_contains '• ОЗ ' | grep -oE 'ОЗ [0-9]+/[0-9]+' | head -n1 | awk '{print $2}')"
+    s=s.replace('HP_LINE="$(first_text_contains \'• ОЗ \')"', 'HP_LINE="'+hp_expr+'"')
+    s=s.replace('RESTORED_HP="$(first_text_contains \'• ОЗ \')"', 'RESTORED_HP="'+hp_expr+'"')
+    s=s.replace('COLD_HP="$(first_text_contains \'• ОЗ \')"', 'COLD_HP="'+hp_expr+'"')
+
     TEST.write_text(s,encoding='utf-8')
 
 def main():
@@ -138,6 +147,6 @@ def main():
             'e.setSingleLine(false);e.setMinLines(6);e.setMaxLines(10);e.setVerticalScrollBarEnabled(true);e.setText(raw);')
     runpy.run_path(str(ROOT/'scripts/final_product_8_0_e2efix.py'),run_name='__main__')
     patch_e2e()
-    print('Gran 2e 8.0 Java compatibility, live PLAY level sync, archive import layout and robust E2E reads applied')
+    print('Gran 2e 8.0 Java compatibility, live PLAY level sync, archive import layout and exact HP E2E reads applied')
 
 if __name__=='__main__': main()
