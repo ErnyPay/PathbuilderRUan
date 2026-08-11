@@ -127,10 +127,11 @@ public final class RuNames {
         MAP.put(key, value);
     }
 
+    /** Russian-first display. Canonical English remains internal and searchable. */
     public static String display(String english) {
         if (english == null) return "";
         String ru = MAP.get(key(english));
-        return ru == null || ru.isEmpty() ? english : ru + " (" + english + ")";
+        return ru == null || ru.isEmpty() ? english : ru;
     }
 
     public static String shortName(String english) {
