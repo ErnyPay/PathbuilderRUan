@@ -1,0 +1,167 @@
+name: Gran 2e 3.1 combat reference verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-combat-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build complete rules corpus and 3.1 UX
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+
+      - name: Verify rules, dictionaries and combat projection
+        run: |
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          python3 - <<'PY'
+          import collections, json, sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          total=db.execute('select count(*) from rules').fetchone()[0]
+          counts=collections.Counter()
+          for (raw,) in db.execute('select json from rules'):
+              meta=json.loads(raw).get('meta',{})
+              for rule in meta.get('ruleElements',[]):
+                  if isinstance(rule,dict): counts[rule.get('key','')] += 1
+          print('rules',total,'combat rule elements', {k:counts[k] for k in ['Strike','Resistance','Weakness','Immunity','MultipleAttackPenalty','DamageDice','AdjustStrike']})
+          assert total > 16000
+          assert counts['Strike'] > 150
+          assert counts['Resistance'] > 300
+          assert counts['Weakness'] > 10
+          assert counts['Immunity'] > 15
+          assert counts['DamageDice'] > 200
+          db.close()
+          PY
+          grep -q 'CombatRules.grantedStrikes' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'Критический урон' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'MAP 0 /' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'СОПРОТИВЛЕНИЯ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'CombatRules.defenses' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q "versionName '3.1.0'" app/build.gradle
+
+      - name: Build installable APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+          ls -lh "$APK" app/src/main/assets/rules.db
+
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Exercise BUILD, PLAY, attacks and defense on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=3.1.0'
+
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
+            sleep 15
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 900; exit 1)
+            adb shell uiautomator dump /sdcard/build31.xml
+            adb shell cat /sdcard/build31.xml > build31.xml
+            grep -q 'СБОРКА' build31.xml
+            grep -q 'ИГРА' build31.xml
+            grep -q 'ПРОГРЕССИЯ 1–20' build31.xml
+            adb exec-out screencap -p > gran2e-31-build.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen attack
+            sleep 4
+            adb shell uiautomator dump /sdcard/attack31.xml
+            adb shell cat /sdcard/attack31.xml > attack31.xml
+            grep -q 'АТАКИ' attack31.xml
+            grep -q 'MAP 0 /' attack31.xml
+            grep -q 'Критический урон' attack31.xml
+            grep -q 'Кулак' attack31.xml
+            adb exec-out screencap -p > gran2e-31-attacks.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen defense
+            sleep 3
+            adb shell uiautomator dump /sdcard/defense31.xml
+            adb shell cat /sdcard/defense31.xml > defense31.xml
+            grep -q 'ЗАЩИТА' defense31.xml
+            grep -q 'СТОЙКОСТЬ' defense31.xml
+            grep -q 'РЕФЛЕКС' defense31.xml
+            adb exec-out screencap -p > gran2e-31-defense.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen feats
+            sleep 2
+            adb shell uiautomator dump /sdcard/feats31.xml
+            adb shell cat /sdcard/feats31.xml > feats31.xml
+            grep -q 'ФИТЫ И ОСОБЕННОСТИ' feats31.xml
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen pets
+            sleep 2
+            adb shell uiautomator dump /sdcard/pets31.xml
+            adb shell cat /sdcard/pets31.xml > pets31.xml
+            grep -q 'ПИТОМЦЫ И КОМПАНЬОНЫ' pets31.xml
+
+      - name: Upload verified Gran 2e 3.1 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-3.1.0-combat-reference-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-31-build.png
+            gran2e-31-attacks.png
+            gran2e-31-defense.png
+            build31.xml
+            attack31.xml
+            defense31.xml
+            feats31.xml
+            pets31.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
