@@ -30,9 +30,6 @@ public final class RuleStore extends SQLiteOpenHelper {
     private RuleStore(Context context, String ignored) {
         super(context, DB, null, VERSION);
         this.context = context;
-        // Every rule-driven screen is Russian-first. Loading here guarantees that
-        // catalogs, BUILD, PLAY and detail dialogs all share the complete generated
-        // ru_names/ru_text corpus instead of falling back to the tiny core map.
         RuNames.init(context);
     }
 
@@ -196,6 +193,9 @@ public final class RuleStore extends SQLiteOpenHelper {
             return c.moveToFirst() ? c.getInt(0) : 0;
         } catch (Exception ignored) { return 0; }
     }
+
+    /** Legacy compatibility for older screens still compiled into the APK. */
+    public int count() { return countAll(); }
 
     public int countAll() {
         try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM rules", null)) {
