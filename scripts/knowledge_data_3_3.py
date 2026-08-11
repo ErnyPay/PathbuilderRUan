@@ -6,7 +6,9 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 CACHE=ROOT/'build'/'pf2e-source'/'packs'/'pf2e'
-DB=ROOT/'app'/'src'/'main'/'assets'/'rules.db'
+ASSETS=ROOT/'app'/'src'/'main'/'assets'
+DB=ASSETS/'rules.db'
+RU_NAMES=ASSETS/'ru_names.json'
 
 
 def update(db, ident, mutate):
@@ -27,6 +29,16 @@ def load_object(path):
     except Exception:
         return None
     return doc if isinstance(doc,dict) else None
+
+
+def patch_ui_terms():
+    try: names=json.loads(RU_NAMES.read_text(encoding='utf-8'))
+    except Exception: names={}
+    # Stable game terms: PF2ERUS already translates Additional Lore; Scribing Lore has no
+    # safe global match in the source dictionary, so keep this tiny reviewed fallback here.
+    names['Additional Lore']='Дополнительные знания'
+    names['Scribing Lore']='Знания писца'
+    RU_NAMES.write_text(json.dumps(names,ensure_ascii=False,sort_keys=True,separators=(',',':')),encoding='utf-8')
 
 
 def main():
@@ -61,6 +73,7 @@ def main():
             feats+=int(update(db,ident,mutate))
         db.commit()
     finally: db.close()
+    patch_ui_terms()
     print('Knowledge enrichment: ancestries',ancestries,'feats with language subfeatures',feats,'skipped non-object JSON',skipped_non_objects)
     if ancestries < 40: raise SystemExit('Ancestry language enrichment incomplete')
 
