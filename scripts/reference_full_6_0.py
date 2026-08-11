@@ -6,6 +6,8 @@ FRONT = ROOT / 'app/src/main/java/ru/gran/edge2e/FrontPageActivity.java'
 BUILD = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java'
 PLAY = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java'
 MORE = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java'
+CATALOG = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceCatalogActivity.java'
+ITEM = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceItemActivity.java'
 
 
 def replace_once(text, old, new, label):
@@ -90,8 +92,25 @@ def patch_more():
     MORE.write_text(s, encoding='utf-8')
 
 
+def patch_catalog():
+    s = CATALOG.read_text(encoding='utf-8')
+    s = replace_once(s, 'b.append(typeLabel(item.subtype));', 'b.append(RuLabels.type(item.subtype));', 'catalog type labels')
+    s = replace_once(s, 'b.append(rarity.toUpperCase(Locale.ROOT));', 'b.append(RuLabels.rarity(rarity));', 'catalog rarity labels')
+    s = replace_once(s, 'body.append("Требования: ").append(String.join("; ",item.prerequisites)).append("\\n");', 'body.append("Требования: ").append(RuNames.prerequisites(item.id,item.prerequisites)).append("\\n");', 'catalog prerequisites')
+    old = '''    private static String join(JSONArray a){List<String>x=new ArrayList<>();for(int i=0;i<a.length();i++){String s=a.optString(i,"");if(!s.isEmpty())x.add(s);}return String.join(", ",x);}'''
+    new = '''    private static String join(JSONArray a){List<String>x=new ArrayList<>();for(int i=0;i<a.length();i++){String s=a.optString(i,"");if(!s.isEmpty())x.add(RuLabels.trait(s));}return String.join(", ",x);}'''
+    s = replace_once(s, old, new, 'catalog traditions')
+    CATALOG.write_text(s, encoding='utf-8')
+
+
+def patch_item():
+    s = ITEM.read_text(encoding='utf-8')
+    s = replace_once(s, 'head.addView(note(item.subtype+(item.level>0?" • ур. "+item.level:"")+(item.traits.isEmpty()?"":"\\n"+item.traitsLine())));', 'head.addView(note(RuLabels.type(item.subtype)+(item.level>0?" • ур. "+item.level:"")+(item.traits.isEmpty()?"":"\\n"+item.traitsLine())));', 'item type label')
+    ITEM.write_text(s, encoding='utf-8')
+
+
 def main():
-    patch_front(); patch_build(); patch_play(); patch_more()
+    patch_front(); patch_build(); patch_play(); patch_more(); patch_catalog(); patch_item()
     print('Applied Gran 6.0 full reference workflow wiring')
 
 
