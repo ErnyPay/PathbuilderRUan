@@ -29,7 +29,7 @@ jobs:
 
       - name: Generate rules and Gran 9.1 reference pages
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_polish_8_2.py scripts/ui_polish_8_2_1.py scripts/reference_interface_9_0.py scripts/reference_interface_9_0_cleanup.py scripts/reference_build_9_1.py scripts/reference_play_pages_9_1.py scripts/ui_rebuild_8_1_e2efix.py scripts/ui_polish_8_2_e2efix.py scripts/ui_polish_8_2_1_e2efix.py scripts/reference_interface_9_0_e2efix.py scripts/reference_pages_9_1_e2efix.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_polish_8_2.py scripts/ui_polish_8_2_1.py scripts/reference_interface_9_0.py scripts/reference_interface_9_0_cleanup.py scripts/reference_build_9_1.py scripts/reference_play_pages_9_1.py scripts/reference_play_9_1_accessibility.py scripts/ui_rebuild_8_1_e2efix.py scripts/ui_polish_8_2_e2efix.py scripts/ui_polish_8_2_1_e2efix.py scripts/reference_interface_9_0_e2efix.py scripts/reference_pages_9_1_e2efix.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -57,6 +57,7 @@ jobs:
           python3 scripts/reference_interface_9_0_cleanup.py
           python3 scripts/reference_build_9_1.py
           python3 scripts/reference_play_pages_9_1.py
+          python3 scripts/reference_play_9_1_accessibility.py
           python3 scripts/ui_rebuild_8_1_e2efix.py
           python3 scripts/ui_polish_8_2_e2efix.py
           python3 scripts/ui_polish_8_2_1_e2efix.py
@@ -68,6 +69,7 @@ jobs:
           grep -q "versionName '9.1.0'" app/build.gradle
           grep -q 'category BUILD applied' scripts/reference_build_9_1.py
           grep -q 'specialized PLAY pages applied' scripts/reference_play_pages_9_1.py
+          grep -q 'armor equip action id restored' scripts/reference_play_9_1_accessibility.py
           grep -q 'versionName=9.1.0' ci/final_product_e2e.sh
           grep -q 'ОСНОВА.*base' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
           grep -q 'ХАРАКТЕРИСТИКИ.*abilities' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
@@ -77,6 +79,7 @@ jobs:
           grep -q 'gearBuildPage' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
           grep -q 'spell-slot-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'gear-add-item' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'item-equip-armor' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'БРОНЯ И ЩИТЫ' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           ! grep -q 'так же, как в эталонном PLAY' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           test -s app/src/main/assets/rules.db
