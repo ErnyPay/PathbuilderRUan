@@ -12,6 +12,10 @@
         <activity
             android:name="ru.gran.edge2e.MainActivityV3"
             android:exported="true"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name="ru.gran.edge2e.FrontPageActivity"
+            android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
