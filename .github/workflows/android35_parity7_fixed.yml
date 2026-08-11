@@ -1,0 +1,162 @@
+name: Gran 2e 7.0 fixed reference parity verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-parity-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Generate Gran 7 reference parity app
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/build_wizard_4_1.py scripts/reference_play_4_2.py scripts/pf2ru_3_5.py scripts/reference_shell_5_0.py scripts/reference_full_6_0.py scripts/reference_parity_7_0.py scripts/reference_parity_7_0_fix.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/frontpage_4_0.py
+          python3 scripts/build_wizard_4_1.py
+          python3 scripts/reference_play_4_2.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/reference_shell_5_0.py
+          python3 scripts/reference_full_6_0.py
+          python3 scripts/reference_parity_7_0.py
+          python3 scripts/reference_parity_7_0_fix.py
+      - name: Verify reference parity source graph
+        run: |
+          grep -q "versionName '7.0.0'" app/build.gradle
+          grep -q 'GRAN_REFERENCE_PARITY_7_0' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'GRAN_REFERENCE_PARITY_7_0' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'DerivedStats.speed(state, stats, ancestryItem(), equippedArmor())' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          for tab in Персонаж Атаки Защита Навыки Фиты Заклинания Снаряжение Питомцы Эффекты; do grep -q "$tab" app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java; done
+          grep -q 'changeLevel' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'agile ? -4 : -5' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'addInventorySection' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'СПРАВОЧНИК И ВЫБОРЫ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          python3 - <<'PY'
+          import json, sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          rows=db.execute('select count(*) from rules').fetchone()[0]
+          ru=json.load(open('app/src/main/assets/ru_names.json',encoding='utf-8'))
+          assert rows>15000 and len(ru)>10000
+          print('rules',rows,'ru',len(ru))
+          db.close()
+          PY
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Verify APK signature and contents
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Exercise reference parity on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=7.0.0'
+
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.FrontPageActivity
+            sleep 3
+            adb shell uiautomator dump /sdcard/g7-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g7-front.xml > g7-front.xml 2>/dev/null || true
+            grep -q 'НОВЫЙ ПЕРСОНАЖ' g7-front.xml
+            adb exec-out screencap -p > gran2e-70-front.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceBuildActivity
+            sleep 3
+            adb shell uiautomator dump /sdcard/g7-build.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g7-build.xml > g7-build.xml 2>/dev/null || true
+            grep -q 'СБОРКА' g7-build.xml
+            grep -q 'УРОВНИ' g7-build.xml
+            grep -q 'ОСНОВА ПЕРСОНАЖА' g7-build.xml
+            adb exec-out screencap -p > gran2e-70-build.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen character
+            sleep 3
+            adb shell uiautomator dump /sdcard/g7-play.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g7-play.xml > g7-play.xml 2>/dev/null || true
+            grep -q 'ПЕРСОНАЖ' g7-play.xml
+            grep -q 'УРОВЕНЬ' g7-play.xml
+            grep -q 'ХАРАКТЕРИСТИКИ' g7-play.xml
+            adb exec-out screencap -p > gran2e-70-play.png
+
+            for screen in attacks defenses skills feats gear; do
+              adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen "$screen"
+              sleep 2
+              adb shell uiautomator dump /sdcard/g7-$screen.xml >/dev/null 2>&1 || true
+              adb shell cat /sdcard/g7-$screen.xml > g7-$screen.xml 2>/dev/null || true
+              test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+              adb exec-out screencap -p > gran2e-70-$screen.png
+            done
+            grep -q 'АТАКИ' g7-attacks.xml
+            grep -q 'ЗАЩИТА' g7-defenses.xml
+            grep -q 'НАВЫКИ' g7-skills.xml
+            grep -q 'ФИТЫ И ОСОБЕННОСТИ' g7-feats.xml
+            grep -q 'СНАРЯЖЕНИЕ' g7-gear.xml
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode weapon --ei maxLevel 20
+            sleep 2
+            adb shell uiautomator dump /sdcard/g7-weapons.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g7-weapons.xml > g7-weapons.xml 2>/dev/null || true
+            grep -q 'ОРУЖИЕ' g7-weapons.xml
+            adb exec-out screencap -p > gran2e-70-weapons.png
+      - name: Upload Gran 2e 7.0 parity APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-7.0.0-reference-parity-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-70-*.png
+            g7-*.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
