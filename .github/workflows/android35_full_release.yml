@@ -76,7 +76,7 @@ jobs:
           for caster in oracle psychic magus summoner animist; do grep -q "case \"$caster\"" app/src/main/java/ru/gran/edge2e/SpellcastingRules.java; done
           for mode in ancestry heritage background class feat spell weapon armor shield equipment rune condition action; do grep -q "case \"$mode\"" app/src/main/java/ru/gran/edge2e/ReferenceCatalogActivity.java; done
           grep -q 'ЯЗЫКИ И LORE' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
-          grep -q 'KOПИРОВАТЬ JSON' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java || grep -q 'КОПИРОВАТЬ JSON' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'КОПИРОВАТЬ JSON' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
           grep -q 'Руна мощи' app/src/main/java/ru/gran/edge2e/ReferenceItemActivity.java
           grep -q 'СПОСОБНОСТИ ФАМИЛЬЯРА' app/src/main/java/ru/gran/edge2e/ReferenceCompanionActivity.java
           python3 - <<'PY'
@@ -121,66 +121,96 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
-            set -e
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell dumpsys package ru.gran.gran2e | grep 'versionName=6.0.0'
 
-            open_dump() {
-              activity="$1"; file="$2"; shift 2
-              adb shell am start -n "ru.gran.gran2e/ru.gran.edge2e.${activity}" "$@"
-              sleep 3
-              test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
-              adb shell uiautomator dump "/sdcard/${file}.xml" >/dev/null 2>&1 || true
-              adb shell cat "/sdcard/${file}.xml" > "${file}.xml" 2>/dev/null || true
-            }
-
             adb shell am force-stop ru.gran.gran2e
-            open_dump FrontPageActivity g6r-front
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.FrontPageActivity
+            sleep 4
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-front.xml > g6r-front.xml 2>/dev/null || true
             grep -q 'НОВЫЙ ПЕРСОНАЖ' g6r-front.xml
             grep -q 'ОТКРЫТЬ ВСЕ ИНСТРУМЕНТЫ' g6r-front.xml
             adb exec-out screencap -p > gran2e-60-release-front.png
 
-            open_dump ReferenceBuildActivity g6r-build
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceBuildActivity
+            sleep 4
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-build.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-build.xml > g6r-build.xml 2>/dev/null || true
             grep -q 'СБОРКА' g6r-build.xml
             grep -q 'УРОВНИ' g6r-build.xml
             grep -q 'ОСНОВА ПЕРСОНАЖА' g6r-build.xml
             adb exec-out screencap -p > gran2e-60-release-build.png
 
-            open_dump ReferenceMoreActivity g6r-more
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceMoreActivity
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-more.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-more.xml > g6r-more.xml 2>/dev/null || true
             grep -q 'БИБЛИОТЕКА И ВЫБОРЫ' g6r-more.xml
             adb exec-out screencap -p > gran2e-60-release-more.png
 
-            open_dump ReferenceCatalogActivity g6r-ancestry --es mode ancestry --ei maxLevel 20
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode ancestry --ei maxLevel 20
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-ancestry.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-ancestry.xml > g6r-ancestry.xml 2>/dev/null || true
             grep -q 'РОД' g6r-ancestry.xml
             grep -q 'Показано:' g6r-ancestry.xml
             adb exec-out screencap -p > gran2e-60-release-ancestry.png
 
-            open_dump ReferenceCatalogActivity g6r-weapons --es mode weapon --ei maxLevel 20
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode weapon --ei maxLevel 20
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-weapons.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-weapons.xml > g6r-weapons.xml 2>/dev/null || true
             grep -q 'ОРУЖИЕ' g6r-weapons.xml
             grep -q 'Показано:' g6r-weapons.xml
             adb exec-out screencap -p > gran2e-60-release-weapons.png
 
-            open_dump ReferenceCatalogActivity g6r-spells --es mode spell --ei maxLevel 10
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode spell --ei maxLevel 10
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-spells.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-spells.xml > g6r-spells.xml 2>/dev/null || true
             grep -q 'ЗАКЛИНАНИЯ' g6r-spells.xml
             grep -q 'Показано:' g6r-spells.xml
             adb exec-out screencap -p > gran2e-60-release-spells.png
 
-            open_dump ReferenceItemActivity g6r-item --es itemId 8V4mgecGASsQ7fjl
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceItemActivity --es itemId 8V4mgecGASsQ7fjl
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-item.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-item.xml > g6r-item.xml 2>/dev/null || true
             grep -q 'ПРЕДМЕТ' g6r-item.xml
             grep -q 'ОРУЖИЕ' g6r-item.xml
             adb exec-out screencap -p > gran2e-60-release-item.png
 
-            open_dump ReferenceCompanionActivity g6r-companion --es companionId missing-test-id
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCompanionActivity --es companionId missing-test-id
+            sleep 2
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-companion.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-companion.xml > g6r-companion.xml 2>/dev/null || true
             grep -q 'Спутник не найден' g6r-companion.xml
 
-            open_dump ReferencePlayActivity g6r-play --es screen character
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen character
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-play.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-play.xml > g6r-play.xml 2>/dev/null || true
             grep -q 'ПЕРСОНАЖ' g6r-play.xml
             grep -q 'АТАКИ' g6r-play.xml
             grep -q 'ЗАЩИТА' g6r-play.xml
             adb exec-out screencap -p > gran2e-60-release-play.png
 
-            open_dump ReferencePlayActivity g6r-gear --es screen gear
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen gear
+            sleep 3
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/g6r-gear.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6r-gear.xml > g6r-gear.xml 2>/dev/null || true
             grep -q 'СНАРЯЖЕНИЕ' g6r-gear.xml
             grep -q 'ОСНОВНОЙ ИНВЕНТАРЬ' g6r-gear.xml
             adb exec-out screencap -p > gran2e-60-release-gear.png
