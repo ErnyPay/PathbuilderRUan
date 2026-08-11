@@ -13,11 +13,10 @@ s=s.replace('SPELL_NAME="${SPELL_TEXT%%$\'\\n\'*}"', 'SPELL_NAME="${SPELL_TEXT%%
 s=s.replace('ITEM_NAME="${ITEM_TEXT%%$\'\\n\'*}"', 'ITEM_NAME="${ITEM_TEXT%%  ·  *}"')
 s=s.replace('COND_NAME="${COND_TEXT%%$\'\\n\'*}"', 'COND_NAME="${COND_TEXT%%  ·  *}"')
 
-# 8.1 moved the PLAY tab strip upward: its actual bounds are roughly y=335..413.
-# Swipe through the centre of the strip instead of the legacy y=350 edge, so
-# off-screen Pets/Effects tabs remain reachable without widening the visual UI.
-s=s.replace('adb shell input swipe 990 350 230 350 350', 'adb shell input swipe 990 375 230 375 300')
-s=s.replace('adb shell input swipe 230 350 990 350 350', 'adb shell input swipe 230 375 990 375 300')
+# 8.1 moved the PLAY tab strip from the legacy y=416 band to roughly y=335..413.
+# Move both reset and forward swipes through the actual centre of the compact strip.
+s=s.replace('adb shell input swipe 160 416 930 416 120', 'adb shell input swipe 160 375 930 375 120')
+s=s.replace('adb shell input swipe 930 416 160 416 220', 'adb shell input swipe 930 375 160 375 220')
 
 # final_product_8_0_e2efix.py has already expanded the original am-start block.
 # Replace that generated section by markers rather than matching its exact text.
