@@ -24,7 +24,11 @@ assert_text 'СОЗДАНИЕ ПЕРСОНАЖА'"""
 if old not in s:
     raise SystemExit('9.0 E2E new-character flow marker not found')
 s=s.replace(old,new)
-s=s.replace('160 375 930 375 120','160 220 930 220 120')
-s=s.replace('930 375 160 375 220','930 220 160 220 220')
+
+# The 9.0 PLAY HorizontalScrollView is actually [345,252]..[1072,324] on the
+# Pixel 6 CI profile. Keep the gesture fully inside it so later tabs remain
+# reachable while the level controls stay fixed at the left.
+s=s.replace('160 375 930 375 120','400 288 1020 288 120')
+s=s.replace('930 375 160 375 220','1020 288 400 288 220')
 TEST.write_text(s,encoding='utf-8')
-print('Gran 2e 9.0 E2E bound to multiline reference-interface product flow')
+print('Gran 2e 9.0 E2E bound to multiline reference-interface flow and real tab strip')
