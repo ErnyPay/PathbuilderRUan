@@ -16,7 +16,10 @@ def replace(path, old, new):
 def main():
     replace(SETUP,'TextView r=selectRow(item,shown);','View r=selectRow(item,shown);')
     replace(PLAY,'View parent = content == null ? null : content.getParent();','android.view.ViewParent parent = content == null ? null : content.getParent();')
+    replace(PLAY,
+            'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));',
+            'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setContentDescription("play-tab-" + target);\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));')
     runpy.run_path(str(ROOT/'scripts/final_product_8_0_e2efix.py'),run_name='__main__')
-    print('Gran 2e 8.0 Java compatibility and E2E navigation fixes applied')
+    print('Gran 2e 8.0 Java compatibility, PLAY identity and E2E navigation fixes applied')
 
 if __name__=='__main__': main()
