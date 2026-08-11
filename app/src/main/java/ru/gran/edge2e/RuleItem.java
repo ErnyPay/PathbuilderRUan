@@ -36,18 +36,24 @@ public final class RuleItem {
     }
 
     public static RuleItem fromJson(JSONObject o) {
+        JSONObject meta = o.optJSONObject("meta");
+        String description = o.optString("description");
+        if (meta != null) {
+            String ru = meta.optString("ruDescription", "").trim();
+            if (!ru.isEmpty()) description = ru;
+        }
         return new RuleItem(
                 o.optString("id"),
                 o.optString("name"),
                 o.optString("category"),
                 o.optString("subtype"),
                 o.optInt("level", 0),
-                o.optString("description"),
+                description,
                 o.optString("source"),
                 o.optString("license"),
                 strings(o.optJSONArray("traits")),
                 strings(o.optJSONArray("prerequisites")),
-                o.optJSONObject("meta")
+                meta
         );
     }
 
