@@ -1,0 +1,125 @@
+name: Gran 2e 9.1 specialized reference pages
+
+on:
+  push:
+    branches: [ final-product-8.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate rules and Gran 9.1 reference pages
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_polish_8_2.py scripts/ui_polish_8_2_1.py scripts/reference_interface_9_0.py scripts/reference_interface_9_0_cleanup.py scripts/reference_build_9_1.py scripts/reference_play_pages_9_1.py scripts/ui_rebuild_8_1_e2efix.py scripts/ui_polish_8_2_e2efix.py scripts/ui_polish_8_2_1_e2efix.py scripts/reference_interface_9_0_e2efix.py scripts/reference_pages_9_1_e2efix.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/final_product_8_0.py
+          python3 scripts/final_product_8_0_compilefix.py
+          python3 scripts/ui_rebuild_8_1.py
+          python3 scripts/ui_polish_8_2.py
+          python3 scripts/ui_polish_8_2_1.py
+          python3 scripts/reference_interface_9_0.py
+          python3 scripts/reference_interface_9_0_cleanup.py
+          python3 scripts/reference_build_9_1.py
+          python3 scripts/reference_play_pages_9_1.py
+          python3 scripts/ui_rebuild_8_1_e2efix.py
+          python3 scripts/ui_polish_8_2_e2efix.py
+          python3 scripts/ui_polish_8_2_1_e2efix.py
+          python3 scripts/reference_interface_9_0_e2efix.py
+          python3 scripts/reference_pages_9_1_e2efix.py
+
+      - name: Verify Gran 9.1 category and specialized interface
+        run: |
+          grep -q "versionName '9.1.0'" app/build.gradle
+          grep -q 'category BUILD applied' scripts/reference_build_9_1.py
+          grep -q 'specialized PLAY pages applied' scripts/reference_play_pages_9_1.py
+          grep -q 'versionName=9.1.0' ci/final_product_e2e.sh
+          grep -q 'ОСНОВА.*base' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ХАРАКТЕРИСТИКИ.*abilities' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'baseBuildPage' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'featsBuildPage' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'spellsBuildPage' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'gearBuildPage' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'spell-slot-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'gear-add-item' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'БРОНЯ И ЩИТЫ' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          ! grep -q 'так же, как в эталонном PLAY' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+
+      - name: Build installable APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK signature and assets
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee ci/apksigner.txt
+          mkdir -p ci/tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci/tools/apksigner.jar
+          sha256sum "$APK" > ci/apk.sha256
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Run full Gran 9.1 reference-page scenario on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash ci/final_product_e2e.sh
+
+      - name: Upload Gran 9.1 verified APK and screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-9.1.0-specialized-reference-pages-e2e-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            ci/e2e/*.png
+            ci/e2e/result.txt
+            ci/e2e/final-window.xml
+            ci/apksigner.txt
+            ci/apk.sha256
+            ci/tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
