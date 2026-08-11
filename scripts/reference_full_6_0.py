@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONT = ROOT / 'app/src/main/java/ru/gran/edge2e/FrontPageActivity.java'
 BUILD = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java'
 PLAY = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java'
+MORE = ROOT / 'app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java'
 
 
 def replace_once(text, old, new, label):
@@ -43,7 +44,6 @@ def patch_build():
 
 def patch_play():
     s = PLAY.read_text(encoding='utf-8')
-    # Add MORE next to BUILD in the persistent top bar.
     anchor = '''        build.setOnClickListener(v -> startActivity(new Intent(this, ReferenceBuildActivity.class)));
         line.addView(build); top.addView(line);'''
     inject = '''        build.setOnClickListener(v -> startActivity(new Intent(this, ReferenceBuildActivity.class)));
@@ -53,28 +53,24 @@ def patch_play():
         line.addView(more); top.addView(line);'''
     s = replace_once(s, anchor, inject, 'play more navigation')
 
-    # Replace generic inventory item dialog with full item/rune editor.
     old = '''            TextView row = actionRow(RuNames.shortName(item.name), meta); row.setOnClickListener(v -> equipmentDialog(item)); list.addView(row);'''
     new = '''            TextView row = actionRow(RuNames.shortName(item.name), meta);
             row.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceItemActivity.class); i.putExtra("itemId", item.id); startActivity(i); });
             list.addView(row);'''
     s = replace_once(s, old, new, 'gear item editor')
 
-    # Open the full equipment browser instead of the small legacy dialog.
     old = '''        TextView add = actionRow("+ ДОБАВИТЬ ПРЕДМЕТ", "оружие, броня, расходники, инструменты"); add.setOnClickListener(v -> showEquipmentPicker()); list.addView(add); col.addView(list, matchWrap(dp(4)));'''
     new = '''        TextView add = actionRow("+ ДОБАВИТЬ ПРЕДМЕТ", "оружие, броня, щиты, расходники, инструменты");
         add.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceCatalogActivity.class); i.putExtra("mode", "equipment"); i.putExtra("maxLevel", state.level); startActivity(i); });
         list.addView(add); col.addView(list, matchWrap(dp(4)));'''
     s = replace_once(s, old, new, 'full equipment catalog')
 
-    # Full condition browser.
     old = '''        Button add = button("+ ДОБАВИТЬ СОСТОЯНИЕ"); add.setOnClickListener(v -> showConditionPicker()); col.addView(add, matchWrap(dp(4)));'''
     new = '''        Button add = button("+ ДОБАВИТЬ СОСТОЯНИЕ");
         add.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceCatalogActivity.class); i.putExtra("mode", "condition"); startActivity(i); });
         col.addView(add, matchWrap(dp(4)));'''
     s = replace_once(s, old, new, 'full condition catalog')
 
-    # Dedicated companion/familiar/eidolon editor on a normal tap.
     old = '''        card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Удалить " + c.name + "?").setNegativeButton("Отмена", null).setPositiveButton("Удалить", (d,w) -> { companions.remove(c.id); companions.save(this); render(); }).show(); return true; }); return card;'''
     new = '''        card.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceCompanionActivity.class); i.putExtra("companionId", c.id); startActivity(i); });
         card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Удалить " + c.name + "?").setNegativeButton("Отмена", null).setPositiveButton("Удалить", (d,w) -> { companions.remove(c.id); companions.save(this); render(); }).show(); return true; }); return card;'''
@@ -82,8 +78,20 @@ def patch_play():
     PLAY.write_text(s, encoding='utf-8')
 
 
+def patch_more():
+    s = MORE.read_text(encoding='utf-8')
+    s = replace_once(s,
+        'c.setPrimaryClip(ClipData.newPlainText("Gran character",state.toJson().toString()))',
+        'c.setPrimaryClip(ClipData.newPlainText("Gran character",GranArchive.exportCharacter(this)))',
+        'complete archive export')
+    old = '''CharacterState imported=CharacterJson.fromString(e.getText().toString());imported.save(this);CharacterProfiles.saveCurrent(this);load();render();toast("Персонаж импортирован");'''
+    new = '''GranArchive.importCharacter(this,e.getText().toString());load();render();toast("Персонаж импортирован полностью");'''
+    s = replace_once(s, old, new, 'complete archive import')
+    MORE.write_text(s, encoding='utf-8')
+
+
 def main():
-    patch_front(); patch_build(); patch_play()
+    patch_front(); patch_build(); patch_play(); patch_more()
     print('Applied Gran 6.0 full reference workflow wiring')
 
 
