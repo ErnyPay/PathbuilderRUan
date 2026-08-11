@@ -65,6 +65,6 @@ public final class RuleItem {
     }
 
     public String traitsLine() {
-        return String.join(" • ", traits);
+        return RuLabels.traits(traits);
     }
 }
