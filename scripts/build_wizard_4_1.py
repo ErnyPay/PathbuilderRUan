@@ -133,6 +133,39 @@ def main():
 '''
     s = replace_once(s, r'    private LinearLayout buildPage\(\) \{.*?\n    private View heroCard\(\)', build_page + '    private View heroCard()', 'buildPage')
 
+    hero = r'''    private View heroCard() {
+        LinearLayout outer = card();
+        outer.setPadding(dp(10), dp(9), dp(10), dp(10));
+
+        EditText name = input("Имя персонажа");
+        name.setText(state.name);
+        name.setTextSize(20);
+        name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        name.setSelectAllOnFocus(false);
+        name.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable s) { state.name = s.toString(); state.save(MainActivityV3.this); }
+        });
+        outer.addView(name, matchWrap(dp(3)));
+
+        String ancestry = state.ancestry.isEmpty() ? "род не выбран" : RuNames.shortName(state.ancestry);
+        String background = state.background.isEmpty() ? "предыстория не выбрана" : RuNames.shortName(state.background);
+        String cls = state.className.isEmpty() ? "класс не выбран" : RuNames.shortName(state.className);
+        outer.addView(note(ancestry + " • " + background + " • " + cls));
+        outer.addView(levelRow());
+
+        LinearLayout abilities = row();
+        abilities.setGravity(Gravity.CENTER);
+        abilities.setPadding(0, dp(7), 0, 0);
+        for (String[] a : ABILITIES) abilities.addView(abilityBox(a[1], stats.abilityScore(a[0]), stats.ability(a[0])), new LinearLayout.LayoutParams(0, dp(64), 1));
+        outer.addView(abilities);
+        return outer;
+    }
+
+'''
+    s = replace_once(s, r'    private View heroCard\(\) \{.*?\n    private View abilityBox\(', hero + '    private View abilityBox(', 'heroCard')
+
     picker = r'''    private void showBasePicker(String category, Selection selection) {
         final EditText search = input("Поиск по-русски или по-английски");
         LinearLayout outer = column(); outer.setPadding(dp(10), dp(4), dp(10), dp(4));
@@ -180,7 +213,7 @@ def main():
     s = replace_once(s, r'    private void showBasePicker\(String category, Selection selection\) \{.*?\n    private void showFeatPicker\(', picker + '    private void showFeatPicker(', 'showBasePicker')
 
     V3.write_text(s, encoding='utf-8')
-    print('Applied Gran 4.1 staged BUILD wizard and ancestry-aware heritage picker')
+    print('Applied Gran 4.1 staged BUILD wizard, compact hero summary and ancestry-aware heritage picker')
 
 
 if __name__ == '__main__':
