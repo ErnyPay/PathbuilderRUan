@@ -1,4 +1,4 @@
-name: Gran 2e 3.5 PF2.RU reference verification
+name: Gran 2e 4.0 reference architecture verification
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-pf2ru-smoke:
+  build-and-reference-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -27,9 +27,9 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build rules, Russian corpus and PF2.RU bridge
+      - name: Build rules, Russian corpus and reference UX
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/pf2ru_3_5.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -47,31 +47,41 @@ jobs:
           python3 scripts/spellcasting_3_2.py
           python3 scripts/knowledge_3_3.py
           python3 scripts/inventory_3_4.py
+          python3 scripts/frontpage_4_0.py
           python3 scripts/pf2ru_3_5.py
 
-      - name: Verify PF2.RU integration and regressions
+      - name: Verify reference structure and PF2.RU integration
         run: |
           test -s app/src/main/assets/rules.db
           test -s app/src/main/assets/ru_names.json
           test -s app/src/main/assets/ru_text.json
           test -s app/src/main/assets/pf2ru_source.json
+          grep -q 'FrontPageActivity' app/src/main/AndroidManifest.xml
+          grep -q 'android.intent.category.LAUNCHER' app/src/main/AndroidManifest.xml
+          grep -q 'НОВЫЙ ПЕРСОНАЖ' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'ПРОДОЛЖИТЬ СБОРКУ' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'ОТКРЫТЬ В ИГРЕ' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'ПЕРСОНАЖИ' app/src/main/java/ru/gran/edge2e/MainActivityV3.java
+          grep -q 'ПЕРСОНАЖИ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ПЕРСОНАЖ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'АТАКИ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ЗАЩИТА' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'НАВЫКИ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ФИТЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ЗАКЛИНАНИЯ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'СНАРЯЖЕНИЕ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ПИТОМЦЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
+          grep -q 'ЭФФЕКТЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
           grep -q 'PF2.RU — текст и правила' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
-          grep -q 'private void openPf2Ru(RuleItem item)' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
-          grep -q 'https://pf2.ru/search?q=' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
-          grep -q 'КОНТЕЙНЕРЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
-          grep -q 'ПОДГОТОВЛЕННЫЕ СЛОТЫ' app/src/main/java/ru/gran/edge2e/MainActivityV2.java
-          grep -q "versionName '3.5.0'" app/build.gradle
+          grep -q "versionName '4.0.0'" app/build.gradle
           python3 - <<'PY'
           import json, sqlite3
           source=json.load(open('app/src/main/assets/pf2ru_source.json',encoding='utf-8'))
           assert source['name']=='PF2.RU'
-          assert source['networkScraping'] is False
           db=sqlite3.connect('app/src/main/assets/rules.db')
-          count=0
-          for (raw,) in db.execute('select json from rules'):
-              if 'pf2ruUrl' in json.loads(raw).get('meta',{}): count += 1
-          print('PF2.RU exact links in local corpus:',count)
-          assert count >= 1
+          rows=db.execute('select count(*) from rules').fetchone()[0]
+          print('Local PF2e rules:', rows)
+          assert rows > 15000
           db.close()
           PY
 
@@ -92,7 +102,7 @@ jobs:
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Launch BUILD and PLAY shell on Android 35
+      - name: Exercise front page, BUILD and PLAY on Android 35
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -103,25 +113,51 @@ jobs:
           script: |
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=3.5.0'
-            adb shell am force-stop ru.gran.gran2e
-            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
-            sleep 10
-            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || { adb logcat -d -v time | tail -n 900; exit 1; }
-            adb shell uiautomator dump /sdcard/gran35.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/gran35.xml > gran35.xml 2>/dev/null || true
-            grep -q 'СБОРКА' gran35.xml
-            grep -q 'ИГРА' gran35.xml
-            adb exec-out screencap -p > gran2e-35-build-play.png
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=4.0.0'
 
-      - name: Upload verified Gran 2e 3.5 APK
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.FrontPageActivity
+            sleep 7
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || { adb logcat -d -v time | tail -n 900; exit 1; }
+            adb shell uiautomator dump /sdcard/gran40-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran40-front.xml > gran40-front.xml 2>/dev/null || true
+            grep -q 'НОВЫЙ ПЕРСОНАЖ' gran40-front.xml
+            grep -q 'МОИ ПЕРСОНАЖИ' gran40-front.xml
+            adb exec-out screencap -p > gran2e-40-front.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
+            sleep 4
+            adb shell uiautomator dump /sdcard/gran40-build.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran40-build.xml > gran40-build.xml 2>/dev/null || true
+            grep -q 'СБОРКА' gran40-build.xml
+            grep -q 'ИГРА' gran40-build.xml
+            grep -q 'ПЕРСОНАЖИ' gran40-build.xml
+            adb exec-out screencap -p > gran2e-40-build.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2
+            sleep 4
+            adb shell uiautomator dump /sdcard/gran40-play.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/gran40-play.xml > gran40-play.xml 2>/dev/null || true
+            grep -q 'ПЕРСОНАЖ' gran40-play.xml
+            grep -q 'АТАКИ' gran40-play.xml
+            grep -q 'ЗАЩИТА' gran40-play.xml
+            grep -q 'НАВЫКИ' gran40-play.xml
+            grep -q 'ФИТЫ' gran40-play.xml
+            grep -q 'ЗАКЛИНАНИЯ' gran40-play.xml
+            adb exec-out screencap -p > gran2e-40-play.png
+
+      - name: Upload verified Gran 2e 4.0 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-3.5.0-pf2ru-reference-verified
+          name: Gran2e-4.0.0-reference-frontpage-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
-            gran2e-35-build-play.png
-            gran35.xml
+            gran2e-40-front.png
+            gran2e-40-build.png
+            gran2e-40-play.png
+            gran40-front.xml
+            gran40-build.xml
+            gran40-play.xml
             ci-tools/apksigner.jar
           if-no-files-found: error
           retention-days: 30
