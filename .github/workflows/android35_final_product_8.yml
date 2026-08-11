@@ -29,7 +29,7 @@ jobs:
 
       - name: Generate rules, Russian corpus, mechanics and compact UI
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_rebuild_8_1_e2efix.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -51,11 +51,15 @@ jobs:
           python3 scripts/final_product_8_0.py
           python3 scripts/final_product_8_0_compilefix.py
           python3 scripts/ui_rebuild_8_1.py
+          python3 scripts/ui_rebuild_8_1_e2efix.py
 
       - name: Verify final product graph and UI rebuild
         run: |
           grep -q "versionName '8.1.0'" app/build.gradle
           grep -q 'compact reference UI rebuild applied' scripts/ui_rebuild_8_1.py
+          grep -q '8.1 E2E version and launcher recovery applied' scripts/ui_rebuild_8_1_e2efix.py
+          grep -q 'versionName=8.1.0' ci/final_product_e2e.sh
+          grep -q 'launch_gran_home' ci/final_product_e2e.sh
           grep -q 'CharacterSetupActivity' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV2' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
