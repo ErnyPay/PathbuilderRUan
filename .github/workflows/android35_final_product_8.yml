@@ -29,7 +29,7 @@ jobs:
 
       - name: Generate rules, Russian corpus and mechanics
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -49,6 +49,7 @@ jobs:
           python3 scripts/inventory_3_4.py
           python3 scripts/pf2ru_3_5.py
           python3 scripts/final_product_8_0.py
+          python3 scripts/final_product_8_0_compilefix.py
 
       - name: Verify final product graph
         run: |
@@ -58,7 +59,9 @@ jobs:
           ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
           grep -q 'home-new-character' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
           grep -q 'setup-option-' app/src/main/java/ru/gran/edge2e/CharacterSetupActivity.java
+          grep -q 'View r=selectRow' app/src/main/java/ru/gran/edge2e/CharacterSetupActivity.java
           grep -q 'CharacterProfiles.saveCurrent' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'android.view.ViewParent parent' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'spell-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'equipment-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'condition-option-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
