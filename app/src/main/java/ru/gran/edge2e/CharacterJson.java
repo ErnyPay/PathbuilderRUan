@@ -27,6 +27,7 @@ public final class CharacterJson {
         copy(o.optJSONObject("skillRanks"), s.skillRanks);
         copy(o.optJSONObject("choices"), s.choices);
         copy(o.optJSONObject("choiceMeta"), s.choiceMeta);
+        copy(o.optJSONObject("ruleSelections"), s.ruleSelections);
         copy(o.optJSONObject("conditions"), s.conditions);
         copy(o.optJSONArray("inventory"), s.inventory);
         copy(o.optJSONArray("spells"), s.spells);
