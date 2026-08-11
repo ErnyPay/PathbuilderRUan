@@ -1,4 +1,4 @@
-name: Gran 2e 8.0 final product end-to-end
+name: Gran 2e 8.1 compact UI end-to-end
 
 on:
   push:
@@ -27,9 +27,9 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Generate rules, Russian corpus and mechanics
+      - name: Generate rules, Russian corpus, mechanics and compact UI
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -50,10 +50,12 @@ jobs:
           python3 scripts/pf2ru_3_5.py
           python3 scripts/final_product_8_0.py
           python3 scripts/final_product_8_0_compilefix.py
+          python3 scripts/ui_rebuild_8_1.py
 
-      - name: Verify final product graph
+      - name: Verify final product graph and UI rebuild
         run: |
-          grep -q "versionName '8.0.0'" app/build.gradle
+          grep -q "versionName '8.1.0'" app/build.gradle
+          grep -q 'compact reference UI rebuild applied' scripts/ui_rebuild_8_1.py
           grep -q 'CharacterSetupActivity' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV2' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
@@ -62,6 +64,7 @@ jobs:
           grep -q 'View r=selectRow' app/src/main/java/ru/gran/edge2e/CharacterSetupActivity.java
           grep -q 'CharacterProfiles.saveCurrent' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
           grep -q 'android.view.ViewParent parent' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'СПАСБРОСКИ · ВОСПРИЯТИЕ' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'spell-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'equipment-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'condition-option-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
@@ -111,7 +114,7 @@ jobs:
       - name: Enable KVM
         run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
 
-      - name: Run full product scenario on Android 35
+      - name: Run full compact UI scenario on Android 35
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -121,10 +124,10 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash ci/final_product_e2e.sh
 
-      - name: Upload finished product
+      - name: Upload compact UI verified product
         uses: actions/upload-artifact@v4
         with:
-          name: Gran2e-8.0.0-final-product-e2e-verified
+          name: Gran2e-8.1.0-compact-ui-e2e-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             ci/e2e/*.png
