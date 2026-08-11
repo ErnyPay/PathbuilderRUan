@@ -1,0 +1,198 @@
+name: Gran 2e 6.0 robust full release verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate final application
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/build_wizard_4_1.py scripts/reference_play_4_2.py scripts/pf2ru_3_5.py scripts/reference_shell_5_0.py scripts/reference_full_6_0.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/frontpage_4_0.py
+          python3 scripts/build_wizard_4_1.py
+          python3 scripts/reference_play_4_2.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/reference_shell_5_0.py
+          python3 scripts/reference_full_6_0.py
+
+      - name: Verify all reference capabilities
+        run: |
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          test -s app/src/main/assets/pf2ru_source.json
+          grep -q "versionName '6.0.0'" app/build.gradle
+          for cls in ReferenceBuildActivity ReferencePlayActivity ReferenceCatalogActivity ReferenceItemActivity ReferenceMoreActivity ReferenceCompanionActivity; do grep -q "$cls" app/src/main/AndroidManifest.xml; done
+          grep -q 'ОТКРЫТЬ ВСЕ ИНСТРУМЕНТЫ' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'ВСЕ БРАУЗЕРЫ И ИНСТРУМЕНТЫ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ReferenceItemActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceCatalogActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceCompanionActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceMoreActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'GranArchive.exportCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'GranArchive.importCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'ruleSelections' app/src/main/java/ru/gran/edge2e/CharacterJson.java
+          grep -q 'ItemMods.potency' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q 'ItemMods.striking' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          for caster in oracle psychic magus summoner animist; do grep -q "case \"$caster\"" app/src/main/java/ru/gran/edge2e/SpellcastingRules.java; done
+          for mode in ancestry heritage background class feat spell weapon armor shield equipment rune condition action; do grep -q "case \"$mode\"" app/src/main/java/ru/gran/edge2e/ReferenceCatalogActivity.java; done
+          grep -q 'ЯЗЫКИ И LORE' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'KOПИРОВАТЬ JSON' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java || grep -q 'КОПИРОВАТЬ JSON' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'Руна мощи' app/src/main/java/ru/gran/edge2e/ReferenceItemActivity.java
+          grep -q 'СПОСОБНОСТИ ФАМИЛЬЯРА' app/src/main/java/ru/gran/edge2e/ReferenceCompanionActivity.java
+          python3 - <<'PY'
+          import json, sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          counts=dict(db.execute('select category,count(*) from rules group by category'))
+          rows=sum(counts.values())
+          ru=json.load(open('app/src/main/assets/ru_names.json',encoding='utf-8'))
+          src=json.load(open('app/src/main/assets/pf2ru_source.json',encoding='utf-8'))
+          print('rules',rows,'ru',len(ru),counts)
+          assert src['name']=='PF2.RU'
+          assert rows>15000 and len(ru)>10000
+          assert counts.get('feat',0)>5000 and counts.get('spell',0)>1500 and counts.get('equipment',0)>4000
+          db.close()
+          PY
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify signed APK
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+          unzip -l "$APK" | grep 'assets/pf2ru_source.json'
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Exercise reference workflows on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            set -e
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=6.0.0'
+
+            open_dump() {
+              activity="$1"; file="$2"; shift 2
+              adb shell am start -n "ru.gran.gran2e/ru.gran.edge2e.${activity}" "$@"
+              sleep 3
+              test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')"
+              adb shell uiautomator dump "/sdcard/${file}.xml" >/dev/null 2>&1 || true
+              adb shell cat "/sdcard/${file}.xml" > "${file}.xml" 2>/dev/null || true
+            }
+
+            adb shell am force-stop ru.gran.gran2e
+            open_dump FrontPageActivity g6r-front
+            grep -q 'НОВЫЙ ПЕРСОНАЖ' g6r-front.xml
+            grep -q 'ОТКРЫТЬ ВСЕ ИНСТРУМЕНТЫ' g6r-front.xml
+            adb exec-out screencap -p > gran2e-60-release-front.png
+
+            open_dump ReferenceBuildActivity g6r-build
+            grep -q 'СБОРКА' g6r-build.xml
+            grep -q 'УРОВНИ' g6r-build.xml
+            grep -q 'ОСНОВА ПЕРСОНАЖА' g6r-build.xml
+            adb exec-out screencap -p > gran2e-60-release-build.png
+
+            open_dump ReferenceMoreActivity g6r-more
+            grep -q 'БИБЛИОТЕКА И ВЫБОРЫ' g6r-more.xml
+            adb exec-out screencap -p > gran2e-60-release-more.png
+
+            open_dump ReferenceCatalogActivity g6r-ancestry --es mode ancestry --ei maxLevel 20
+            grep -q 'РОД' g6r-ancestry.xml
+            grep -q 'Показано:' g6r-ancestry.xml
+            adb exec-out screencap -p > gran2e-60-release-ancestry.png
+
+            open_dump ReferenceCatalogActivity g6r-weapons --es mode weapon --ei maxLevel 20
+            grep -q 'ОРУЖИЕ' g6r-weapons.xml
+            grep -q 'Показано:' g6r-weapons.xml
+            adb exec-out screencap -p > gran2e-60-release-weapons.png
+
+            open_dump ReferenceCatalogActivity g6r-spells --es mode spell --ei maxLevel 10
+            grep -q 'ЗАКЛИНАНИЯ' g6r-spells.xml
+            grep -q 'Показано:' g6r-spells.xml
+            adb exec-out screencap -p > gran2e-60-release-spells.png
+
+            open_dump ReferenceItemActivity g6r-item --es itemId 8V4mgecGASsQ7fjl
+            grep -q 'ПРЕДМЕТ' g6r-item.xml
+            grep -q 'ОРУЖИЕ' g6r-item.xml
+            adb exec-out screencap -p > gran2e-60-release-item.png
+
+            open_dump ReferenceCompanionActivity g6r-companion --es companionId missing-test-id
+            grep -q 'Спутник не найден' g6r-companion.xml
+
+            open_dump ReferencePlayActivity g6r-play --es screen character
+            grep -q 'ПЕРСОНАЖ' g6r-play.xml
+            grep -q 'АТАКИ' g6r-play.xml
+            grep -q 'ЗАЩИТА' g6r-play.xml
+            adb exec-out screencap -p > gran2e-60-release-play.png
+
+            open_dump ReferencePlayActivity g6r-gear --es screen gear
+            grep -q 'СНАРЯЖЕНИЕ' g6r-gear.xml
+            grep -q 'ОСНОВНОЙ ИНВЕНТАРЬ' g6r-gear.xml
+            adb exec-out screencap -p > gran2e-60-release-gear.png
+
+      - name: Upload Gran 2e 6.0 release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-6.0.0-full-reference-release
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-60-release-*.png
+            g6r-*.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
