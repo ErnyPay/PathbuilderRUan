@@ -57,9 +57,10 @@ jobs:
         run: |
           grep -q "versionName '8.1.0'" app/build.gradle
           grep -q 'compact reference UI rebuild applied' scripts/ui_rebuild_8_1.py
-          grep -q '8.1 E2E version and launcher recovery applied' scripts/ui_rebuild_8_1_e2efix.py
+          grep -q 'tab geometry and launcher recovery applied' scripts/ui_rebuild_8_1_e2efix.py
           grep -q 'versionName=8.1.0' ci/final_product_e2e.sh
           grep -q 'launch_gran_home' ci/final_product_e2e.sh
+          grep -q '990 375 230 375 300' ci/final_product_e2e.sh
           grep -q 'CharacterSetupActivity' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV2' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
