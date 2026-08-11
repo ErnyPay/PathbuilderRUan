@@ -63,6 +63,6 @@ done
 grep -q 'LORE' knowledge33-all.xml
 grep -q 'Военная история' knowledge33-all.xml
 grep -q 'Эксперт' knowledge33-all.xml
-# Acolyte must contribute its automatic Scribing Lore; accept Russian or canonical fallback.
-grep -Eq 'Scribing Lore|Писц|Письм' knowledge33-all.xml || { cat knowledge33-all.xml; exit 1; }
+grep -q 'Знания писца' knowledge33-all.xml || { cat knowledge33-all.xml; exit 1; }
+grep -q 'Дополнительные знания' knowledge33-all.xml || { cat knowledge33-all.xml; exit 1; }
 adb exec-out screencap -p > gran2e-33-lore.png
