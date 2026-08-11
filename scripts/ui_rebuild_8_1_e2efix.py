@@ -7,6 +7,12 @@ TEST=ROOT/'ci/final_product_e2e.sh'
 s=TEST.read_text(encoding='utf-8')
 s=s.replace("versionName=8.0.0", "versionName=8.1.0")
 
+# Compact 8.1 picker rows render primary label and metadata on one line.
+# Keep E2E assertions semantic by extracting only the primary name.
+s=s.replace('SPELL_NAME="${SPELL_TEXT%%$\'\\n\'*}"', 'SPELL_NAME="${SPELL_TEXT%%  ·  *}"')
+s=s.replace('ITEM_NAME="${ITEM_TEXT%%$\'\\n\'*}"', 'ITEM_NAME="${ITEM_TEXT%%  ·  *}"')
+s=s.replace('COND_NAME="${COND_TEXT%%$\'\\n\'*}"', 'COND_NAME="${COND_TEXT%%  ·  *}"')
+
 # final_product_8_0_e2efix.py has already expanded the original am-start block.
 # Replace that generated section by markers rather than matching its exact text.
 start=s.find('adb logcat -c')
@@ -43,4 +49,4 @@ assert_text 'НОВЫЙ ПЕРСОНАЖ' '''
 
 s=s[:start]+new+s[end:]
 TEST.write_text(s,encoding='utf-8')
-print('Gran 2e 8.1 E2E version and launcher recovery applied')
+print('Gran 2e 8.1 E2E version, compact labels and launcher recovery applied')
