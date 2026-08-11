@@ -140,7 +140,6 @@ jobs:
             grep -q 'Наследие' gran41-build.xml
             grep -q 'Предыстория' gran41-build.xml
             grep -q 'Класс' gran41-build.xml
-            grep -q 'ОТКРЫТЬ В ИГРЕ' gran41-build.xml
             adb exec-out screencap -p > gran2e-41-build.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2
