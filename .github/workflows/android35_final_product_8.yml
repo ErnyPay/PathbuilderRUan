@@ -1,0 +1,134 @@
+name: Gran 2e 8.0 final product end-to-end
+
+on:
+  push:
+    branches: [ final-product-8.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-product:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate rules, Russian corpus and mechanics
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/final_product_8_0.py
+
+      - name: Verify final product graph
+        run: |
+          grep -q "versionName '8.0.0'" app/build.gradle
+          grep -q 'CharacterSetupActivity' app/src/main/AndroidManifest.xml
+          ! grep -q 'MainActivityV2' app/src/main/AndroidManifest.xml
+          ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
+          grep -q 'home-new-character' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'setup-option-' app/src/main/java/ru/gran/edge2e/CharacterSetupActivity.java
+          grep -q 'CharacterProfiles.saveCurrent' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'spell-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'equipment-picker-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'condition-option-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'pet-add-' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'item-equip-armor' app/src/main/java/ru/gran/edge2e/ReferenceItemActivity.java
+          grep -q 'more-paste-confirm' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'itemMods' app/src/main/java/ru/gran/edge2e/CharacterProfiles.java
+          grep -q 'gran2e-archive-1' app/src/main/java/ru/gran/edge2e/GranArchive.java
+          ! grep -q 'не сформированы варианты' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          test -x ci/final_product_e2e.sh
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          python3 - <<'PY'
+          import json, sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          rules=db.execute('select count(*) from rules').fetchone()[0]
+          ancestry=db.execute("select count(*) from rules where category='ancestry'").fetchone()[0]
+          classes=db.execute("select count(*) from rules where category='class'").fetchone()[0]
+          spells=db.execute("select count(*) from rules where category='spell'").fetchone()[0]
+          equipment=db.execute("select count(*) from rules where category='equipment'").fetchone()[0]
+          ru_names=json.load(open('app/src/main/assets/ru_names.json',encoding='utf-8'))
+          ru_text=json.load(open('app/src/main/assets/ru_text.json',encoding='utf-8'))
+          translated_desc=sum(1 for v in ru_text.values() if isinstance(v,dict) and v.get('description'))
+          print(dict(rules=rules,ancestry=ancestry,classes=classes,spells=spells,equipment=equipment,ru_names=len(ru_names),ru_descriptions=translated_desc))
+          assert rules > 15000 and ancestry >= 40 and classes >= 20 and spells >= 1500 and equipment >= 5000
+          assert len(ru_names) > 10000 and translated_desc > 10000
+          db.close()
+          PY
+
+      - name: Build installable APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK signature and assets
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee ci/apksigner.txt
+          mkdir -p ci/tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci/tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+          sha256sum "$APK" > ci/apk.sha256
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Run full product scenario on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash ci/final_product_e2e.sh
+
+      - name: Upload finished product
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-8.0.0-final-product-e2e-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            ci/e2e/*.png
+            ci/e2e/result.txt
+            ci/e2e/final-window.xml
+            ci/apksigner.txt
+            ci/apk.sha256
+            ci/tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
