@@ -29,13 +29,36 @@ def patch_e2e():
 }
 '''
     new_dump=r'''dump_ui(){
-  local n
-  for n in 1 2 3 4 5; do
+  local n coords
+  for n in 1 2 3 4 5 6 7 8; do
     adb shell rm -f /sdcard/gran-window.xml >/dev/null 2>&1 || true
     : > ci/e2e/window.xml
     if adb shell uiautomator dump /sdcard/gran-window.xml >/dev/null 2>&1; then
       adb shell cat /sdcard/gran-window.xml > ci/e2e/window.xml 2>/dev/null || true
-      if grep -q '<hierarchy' ci/e2e/window.xml 2>/dev/null; then return 0; fi
+      if grep -q '<hierarchy' ci/e2e/window.xml 2>/dev/null; then
+        # Android emulator can surface an ANR from its own Quickstep launcher while
+        # Gran remains healthy and resumed. Dismiss only that system process; never
+        # dismiss an ANR belonging to Gran itself.
+        if grep -q "Quickstep isn't responding" ci/e2e/window.xml 2>/dev/null; then
+          coords="$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+root=ET.parse('ci/e2e/window.xml').getroot()
+for n in root.iter('node'):
+    if n.attrib.get('resource-id')=='android:id/aerr_close':
+        m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib.get('bounds',''))
+        if m:
+            x1,y1,x2,y2=map(int,m.groups()); print((x1+x2)//2,(y1+y2)//2); break
+PY
+)"
+          if [ -n "$coords" ]; then
+            echo "[E2E] dismiss emulator Quickstep ANR" >&2
+            adb shell input tap $coords >/dev/null 2>&1 || true
+            sleep 1
+            continue
+          fi
+        fi
+        return 0
+      fi
     fi
     sleep 1
   done
@@ -44,8 +67,12 @@ def patch_e2e():
 '''
     if old_dump in s:
         s=s.replace(old_dump,new_dump)
-    elif new_dump not in s:
-        raise SystemExit('fresh UI dump target not found')
+    else:
+        start=s.find('dump_ui(){')
+        end=s.find('tap_desc(){',start)
+        if start < 0 or end < 0:
+            raise SystemExit('fresh UI dump target not found')
+        s=s[:start]+new_dump+'\n'+s[end:]
 
     start=s.find('text_desc(){')
     end=s.find('first_text_contains(){',start)
@@ -92,6 +119,6 @@ def main():
             'TextView t = tab(spec[0], spec[1].equals(screen)); String target = spec[1];\n            t.setContentDescription("play-tab-" + target);\n            t.setOnClickListener(v -> { screen = target; render(); }); nav.addView(t, wrapWrap(dp(2)));')
     runpy.run_path(str(ROOT/'scripts/final_product_8_0_e2efix.py'),run_name='__main__')
     patch_e2e()
-    print('Gran 2e 8.0 Java compatibility, PLAY identity and fresh recursive E2E reads applied')
+    print('Gran 2e 8.0 Java compatibility, PLAY identity and robust E2E reads applied')
 
 if __name__=='__main__': main()
