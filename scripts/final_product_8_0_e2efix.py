@@ -132,13 +132,15 @@ PY
         marker=robust_text
         helper=r'''tap_tab(){
   local target="$1" desc="play-tab-$1" xy i
-  for i in $(seq 1 8); do adb shell input swipe 160 330 930 330 120 >/dev/null; done
+  # PLAY tab strip is around y=416 on the Pixel 6 CI profile. Reset it to
+  # the left edge first, then advance right until the target becomes visible.
+  for i in $(seq 1 8); do adb shell input swipe 160 416 930 416 120 >/dev/null; done
   sleep 1
   for i in $(seq 1 10); do
     if xy="$(coord_desc "$desc" 2>/dev/null)"; then
       log "tap tab $target @ $xy"; adb shell input tap $xy; sleep 1; return 0
     fi
-    adb shell input swipe 930 330 160 330 220 >/dev/null
+    adb shell input swipe 930 416 160 416 220 >/dev/null
     sleep 1
   done
   echo "Could not reach PLAY tab: $target" >&2
