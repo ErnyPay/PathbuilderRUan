@@ -1,0 +1,42 @@
+name: Gran 8 payload integrity diagnostic
+
+on:
+  push:
+    branches: [ final-product-8.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect payload chunks
+        run: |
+          wc -c scripts/final_product_8_0_payload_*.b64
+          sha256sum scripts/final_product_8_0_payload_*.b64
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, io, tarfile
+          p=Path('scripts')
+          order=[0,1,2,3,4,6,5]
+          parts=[]
+          for i in order:
+              q=p/f'final_product_8_0_payload_{i:02d}.b64'
+              s=q.read_text(encoding='ascii').strip()
+              print(q.name,len(s),hashlib.sha256(s.encode()).hexdigest())
+              parts.append(s)
+          encoded=''.join(parts)
+          print('encoded',len(encoded),hashlib.sha256(encoded.encode()).hexdigest())
+          raw=base64.b64decode(encoded,validate=True)
+          print('raw',len(raw),hashlib.sha256(raw).hexdigest())
+          with tarfile.open(fileobj=io.BytesIO(raw),mode='r:gz') as tf:
+              for m in tf.getmembers():
+                  if not m.isfile(): continue
+                  b=tf.extractfile(m).read()
+                  print(m.name,len(b),hashlib.sha256(b).hexdigest())
+                  if m.name.endswith(('.java','.gradle','.xml')):
+                      b.decode('utf-8')
+          PY
