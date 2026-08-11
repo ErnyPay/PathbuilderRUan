@@ -73,6 +73,12 @@ def patch_play():
         add.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceCatalogActivity.class); i.putExtra("mode", "condition"); startActivity(i); });
         col.addView(add, matchWrap(dp(4)));'''
     s = replace_once(s, old, new, 'full condition catalog')
+
+    # Dedicated companion/familiar/eidolon editor on a normal tap.
+    old = '''        card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Удалить " + c.name + "?").setNegativeButton("Отмена", null).setPositiveButton("Удалить", (d,w) -> { companions.remove(c.id); companions.save(this); render(); }).show(); return true; }); return card;'''
+    new = '''        card.setOnClickListener(v -> { Intent i = new Intent(this, ReferenceCompanionActivity.class); i.putExtra("companionId", c.id); startActivity(i); });
+        card.setOnLongClickListener(v -> { new AlertDialog.Builder(this).setTitle("Удалить " + c.name + "?").setNegativeButton("Отмена", null).setPositiveButton("Удалить", (d,w) -> { companions.remove(c.id); companions.save(this); render(); }).show(); return true; }); return card;'''
+    s = replace_once(s, old, new, 'companion editor')
     PLAY.write_text(s, encoding='utf-8')
 
 
