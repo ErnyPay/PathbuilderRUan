@@ -30,9 +30,7 @@ public final class CharacterProfiles {
         }
     }
 
-    public static String activeId(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ACTIVE, "");
-    }
+    public static String activeId(Context context) { return prefs(context).getString(ACTIVE, ""); }
 
     public static List<Profile> list(Context context) {
         JSONObject root = readRoot(context); List<Profile> out = new ArrayList<>();
@@ -53,10 +51,7 @@ public final class CharacterProfiles {
         String id = activeId(context); if (id == null || id.isEmpty()) id = UUID.randomUUID().toString();
         saveCurrentAs(context, id); return id;
     }
-
-    public static String saveCopy(Context context) {
-        String id = UUID.randomUUID().toString(); saveCurrentAs(context, id); return id;
-    }
+    public static String saveCopy(Context context) { String id = UUID.randomUUID().toString(); saveCurrentAs(context, id); return id; }
 
     public static void saveCurrentAs(Context context, String id) {
         if (id == null || id.isEmpty()) return;
@@ -67,6 +62,7 @@ public final class CharacterProfiles {
             p.put("inventory", raw(context, "gran2e_inventory_v2", "inventory", new InventoryState().toJson().toString()));
             p.put("companions", raw(context, "gran2e_companions_v3", "state", "{}"));
             p.put("spellcasting", raw(context, SpellcastingState.PREFS, SpellcastingState.KEY, "{}"));
+            p.put("knowledge", raw(context, KnowledgeState.PREFS, KnowledgeState.KEY, "{}"));
             p.put("savedAt", System.currentTimeMillis());
             root.put(id, p);
             prefs(context).edit().putString(KEY, root.toString()).putString(ACTIVE, id).apply();
@@ -82,6 +78,7 @@ public final class CharacterProfiles {
         write(context, "gran2e_inventory_v2", "inventory", p.optString("inventory", "{}"));
         write(context, "gran2e_companions_v3", "state", p.optString("companions", "{}"));
         write(context, SpellcastingState.PREFS, SpellcastingState.KEY, p.optString("spellcasting", "{}"));
+        write(context, KnowledgeState.PREFS, KnowledgeState.KEY, p.optString("knowledge", "{}"));
         prefs(context).edit().putString(ACTIVE, id).apply();
         RuntimeBridge.invalidate();
         return true;
@@ -94,6 +91,7 @@ public final class CharacterProfiles {
         InventoryState i = new InventoryState(); i.save(context);
         context.getSharedPreferences("gran2e_companions_v3", Context.MODE_PRIVATE).edit().clear().apply();
         context.getSharedPreferences(SpellcastingState.PREFS, Context.MODE_PRIVATE).edit().clear().apply();
+        context.getSharedPreferences(KnowledgeState.PREFS, Context.MODE_PRIVATE).edit().clear().apply();
         String id = UUID.randomUUID().toString(); prefs(context).edit().putString(ACTIVE, id).apply(); saveCurrentAs(context, id);
         RuntimeBridge.invalidate(); return id;
     }
