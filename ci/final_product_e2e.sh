@@ -61,8 +61,21 @@ PY
 text_desc(){ local desc="$1"; dump_ui; python3 - "$desc" <<'PY'
 import sys,xml.etree.ElementTree as ET
 needle=sys.argv[1];root=ET.parse('ci/e2e/window.xml').getroot()
+def first_text(node):
+    t=node.attrib.get('text','').strip()
+    if t:
+        return t
+    for child in node:
+        t=first_text(child)
+        if t:
+            return t
+    return ''
 for n in root.iter('node'):
-    if n.attrib.get('content-desc')==needle: print(n.attrib.get('text',''));sys.exit(0)
+    if n.attrib.get('content-desc')==needle:
+        text=first_text(n)
+        if text:
+            print(text);sys.exit(0)
+        sys.exit(3)
 sys.exit(2)
 PY
 }
@@ -183,6 +196,7 @@ assert_text 'БРОНЯ'
 ARMOR_TEXT="$(text_desc catalog-item-0)"
 ARMOR_NAME="${ARMOR_TEXT%%$'\n'*}"
 [ -n "$ARMOR_NAME" ]
+log "armor candidate: $ARMOR_NAME"
 tap_desc catalog-item-0
 tap_text 'ДОБАВИТЬ'
 adb shell input keyevent 4
