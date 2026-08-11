@@ -1,0 +1,26 @@
+name: Gran final product source snapshot
+
+on:
+  push:
+    branches: [ final-product-8.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Pack source tree
+        run: |
+          tar --exclude=.git --exclude=build --exclude=app/build -czf Gran-source-final-product.tar.gz .
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran-source-final-product
+          path: Gran-source-final-product.tar.gz
+          if-no-files-found: error
+          retention-days: 1
