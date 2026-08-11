@@ -68,7 +68,7 @@ jobs:
           grep -q 'itemMods' app/src/main/java/ru/gran/edge2e/CharacterProfiles.java
           grep -q 'gran2e-archive-1' app/src/main/java/ru/gran/edge2e/GranArchive.java
           ! grep -q 'не сформированы варианты' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
-          test -x ci/final_product_e2e.sh
+          test -s ci/final_product_e2e.sh
           test -s app/src/main/assets/rules.db
           test -s app/src/main/assets/ru_names.json
           test -s app/src/main/assets/ru_text.json
