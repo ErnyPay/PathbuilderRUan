@@ -29,7 +29,7 @@ jobs:
 
       - name: Generate rules, mechanics and reference interface
         run: |
-          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_polish_8_2.py scripts/ui_polish_8_2_1.py scripts/reference_interface_9_0.py scripts/ui_rebuild_8_1_e2efix.py scripts/ui_polish_8_2_e2efix.py scripts/ui_polish_8_2_1_e2efix.py scripts/reference_interface_9_0_e2efix.py
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/pf2ru_3_5.py scripts/final_product_8_0.py scripts/final_product_8_0_compilefix.py scripts/ui_rebuild_8_1.py scripts/ui_polish_8_2.py scripts/ui_polish_8_2_1.py scripts/reference_interface_9_0.py scripts/reference_interface_9_0_cleanup.py scripts/ui_rebuild_8_1_e2efix.py scripts/ui_polish_8_2_e2efix.py scripts/ui_polish_8_2_1_e2efix.py scripts/reference_interface_9_0_e2efix.py
           python3 scripts/build_rules.py
           python3 scripts/finalize_rules.py
           python3 scripts/enrich_runtime.py
@@ -54,6 +54,7 @@ jobs:
           python3 scripts/ui_polish_8_2.py
           python3 scripts/ui_polish_8_2_1.py
           python3 scripts/reference_interface_9_0.py
+          python3 scripts/reference_interface_9_0_cleanup.py
           python3 scripts/ui_rebuild_8_1_e2efix.py
           python3 scripts/ui_polish_8_2_e2efix.py
           python3 scripts/ui_polish_8_2_1_e2efix.py
@@ -63,11 +64,12 @@ jobs:
         run: |
           grep -q "versionName '9.0.0'" app/build.gradle
           grep -q 'reference-interface parity shell applied' scripts/reference_interface_9_0.py
-          grep -q 'reference-interface product flow' scripts/reference_interface_9_0_e2efix.py
+          grep -q 'visible reference-interface wording cleanup' scripts/reference_interface_9_0_cleanup.py
+          grep -q 'real tab strip' scripts/reference_interface_9_0_e2efix.py
           grep -q 'versionName=9.0.0' ci/final_product_e2e.sh
           grep -q 'open internal setup harness' ci/final_product_e2e.sh
-          grep -q '160 220 930 220 120' ci/final_product_e2e.sh
-          grep -q '930 220 160 220 220' ci/final_product_e2e.sh
+          grep -q '400 288 1020 288 120' ci/final_product_e2e.sh
+          grep -q '1020 288 400 288 220' ci/final_product_e2e.sh
           grep -q 'showPlayDrawer' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'private LinearLayout tabNav' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'play-menu' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
@@ -78,6 +80,7 @@ jobs:
           grep -q 'sans-serif-condensed' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           grep -q 'identityCell' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
           ! grep -R -q 'curriculum-slot' app/src/main/java/ru/gran/edge2e
+          ! grep -R -q 'дополнительный ячейка' app/src/main/java/ru/gran/edge2e
           grep -q 'CharacterSetupActivity' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV2' app/src/main/AndroidManifest.xml
           ! grep -q 'MainActivityV3' app/src/main/AndroidManifest.xml
