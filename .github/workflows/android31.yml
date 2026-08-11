@@ -108,19 +108,16 @@ jobs:
 
             adb shell am force-stop ru.gran.gran2e
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV3
-            sleep 15
+            sleep 8
             test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || (adb logcat -d -v time | tail -n 900; exit 1)
-            adb shell uiautomator dump /sdcard/build31.xml
-            adb shell cat /sdcard/build31.xml > build31.xml
-            grep -q 'СБОРКА' build31.xml
+            for i in 1 2 3 4 5 6 7 8; do adb shell uiautomator dump /sdcard/build31.xml >/dev/null 2>&1 || true; adb shell cat /sdcard/build31.xml > build31.xml 2>/dev/null || true; grep -q 'СБОРКА' build31.xml 2>/dev/null && break; sleep 4; done
+            grep -q 'СБОРКА' build31.xml || (adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' || true; adb logcat -d -v time | tail -n 900; cat build31.xml; exit 1)
             grep -q 'ИГРА' build31.xml
             grep -q 'ПРОГРЕССИЯ 1–20' build31.xml
             adb exec-out screencap -p > gran2e-31-build.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen attack
-            sleep 4
-            adb shell uiautomator dump /sdcard/attack31.xml
-            adb shell cat /sdcard/attack31.xml > attack31.xml
+            for i in 1 2 3 4 5; do sleep 2; adb shell uiautomator dump /sdcard/attack31.xml >/dev/null 2>&1 || true; adb shell cat /sdcard/attack31.xml > attack31.xml 2>/dev/null || true; grep -q 'АТАКИ' attack31.xml 2>/dev/null && break; done
             grep -q 'АТАКИ' attack31.xml
             grep -q 'MAP 0 /' attack31.xml
             grep -q 'Критический урон' attack31.xml
@@ -128,22 +125,20 @@ jobs:
             adb exec-out screencap -p > gran2e-31-attacks.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen defense
-            sleep 3
-            adb shell uiautomator dump /sdcard/defense31.xml
-            adb shell cat /sdcard/defense31.xml > defense31.xml
+            for i in 1 2 3 4 5; do sleep 2; adb shell uiautomator dump /sdcard/defense31.xml >/dev/null 2>&1 || true; adb shell cat /sdcard/defense31.xml > defense31.xml 2>/dev/null || true; grep -q 'ЗАЩИТА' defense31.xml 2>/dev/null && break; done
             grep -q 'ЗАЩИТА' defense31.xml
             grep -q 'СТОЙКОСТЬ' defense31.xml
             grep -q 'РЕФЛЕКС' defense31.xml
             adb exec-out screencap -p > gran2e-31-defense.png
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen feats
-            sleep 2
+            sleep 3
             adb shell uiautomator dump /sdcard/feats31.xml
             adb shell cat /sdcard/feats31.xml > feats31.xml
             grep -q 'ФИТЫ И ОСОБЕННОСТИ' feats31.xml
 
             adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.MainActivityV2 --es screen pets
-            sleep 2
+            sleep 3
             adb shell uiautomator dump /sdcard/pets31.xml
             adb shell cat /sdcard/pets31.xml > pets31.xml
             grep -q 'ПИТОМЦЫ И КОМПАНЬОНЫ' pets31.xml
