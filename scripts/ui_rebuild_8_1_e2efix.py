@@ -13,6 +13,12 @@ s=s.replace('SPELL_NAME="${SPELL_TEXT%%$\'\\n\'*}"', 'SPELL_NAME="${SPELL_TEXT%%
 s=s.replace('ITEM_NAME="${ITEM_TEXT%%$\'\\n\'*}"', 'ITEM_NAME="${ITEM_TEXT%%  ·  *}"')
 s=s.replace('COND_NAME="${COND_TEXT%%$\'\\n\'*}"', 'COND_NAME="${COND_TEXT%%  ·  *}"')
 
+# 8.1 moved the PLAY tab strip upward: its actual bounds are roughly y=335..413.
+# Swipe through the centre of the strip instead of the legacy y=350 edge, so
+# off-screen Pets/Effects tabs remain reachable without widening the visual UI.
+s=s.replace('adb shell input swipe 990 350 230 350 350', 'adb shell input swipe 990 375 230 375 300')
+s=s.replace('adb shell input swipe 230 350 990 350 350', 'adb shell input swipe 230 375 990 375 300')
+
 # final_product_8_0_e2efix.py has already expanded the original am-start block.
 # Replace that generated section by markers rather than matching its exact text.
 start=s.find('adb logcat -c')
@@ -49,4 +55,4 @@ assert_text 'НОВЫЙ ПЕРСОНАЖ' '''
 
 s=s[:start]+new+s[end:]
 TEST.write_text(s,encoding='utf-8')
-print('Gran 2e 8.1 E2E version and launcher recovery applied; compact picker labels normalized')
+print('Gran 2e 8.1 E2E version, compact labels, tab geometry and launcher recovery applied')
