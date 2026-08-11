@@ -1,0 +1,245 @@
+name: Gran 2e 6.0 final full reference verification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-reference-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate complete rules, Russian data and reference workflows
+        run: |
+          python3 -m py_compile scripts/build_rules.py scripts/finalize_rules.py scripts/enrich_runtime.py scripts/inject_ability_choices.py scripts/inject_rule_constraints.py scripts/apply_ru_dictionary.py scripts/extend_runtime_2_0.py scripts/spell_rules_2_0.py scripts/knowledge_data_3_3.py scripts/inventory_data_3_4.py scripts/prepare_2_0.py scripts/prepare_3_0.py scripts/runes_3_0.py scripts/combat_3_1.py scripts/spellcasting_3_2.py scripts/knowledge_3_3.py scripts/inventory_3_4.py scripts/frontpage_4_0.py scripts/build_wizard_4_1.py scripts/reference_play_4_2.py scripts/pf2ru_3_5.py scripts/reference_shell_5_0.py scripts/reference_full_6_0.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/frontpage_4_0.py
+          python3 scripts/build_wizard_4_1.py
+          python3 scripts/reference_play_4_2.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/reference_shell_5_0.py
+          python3 scripts/reference_full_6_0.py
+
+      - name: Verify complete reference module graph
+        run: |
+          test -s app/src/main/assets/rules.db
+          test -s app/src/main/assets/ru_names.json
+          test -s app/src/main/assets/ru_text.json
+          test -s app/src/main/assets/pf2ru_source.json
+          grep -q "versionName '6.0.0'" app/build.gradle
+          for cls in ReferenceBuildActivity ReferencePlayActivity ReferenceCatalogActivity ReferenceItemActivity ReferenceMoreActivity ReferenceCompanionActivity; do
+            grep -q "$cls" app/src/main/AndroidManifest.xml
+          done
+          grep -q 'ОТКРЫТЬ ВСЕ ИНСТРУМЕНТЫ' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'ВСЕ БРАУЗЕРЫ И ИНСТРУМЕНТЫ' app/src/main/java/ru/gran/edge2e/ReferenceBuildActivity.java
+          grep -q 'ReferenceItemActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceCatalogActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceCompanionActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'ReferenceMoreActivity.class' app/src/main/java/ru/gran/edge2e/ReferencePlayActivity.java
+          grep -q 'GranArchive.exportCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'GranArchive.importCharacter' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'ruleSelections' app/src/main/java/ru/gran/edge2e/CharacterJson.java
+          grep -q 'ItemMods.potency' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q 'ItemMods.striking' app/src/main/java/ru/gran/edge2e/DerivedStats.java
+          grep -q 'BOUNDED' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          grep -q 'case "oracle"' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          grep -q 'case "psychic"' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          grep -q 'case "magus"' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          grep -q 'case "summoner"' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          grep -q 'case "animist"' app/src/main/java/ru/gran/edge2e/SpellcastingRules.java
+          for mode in ancestry heritage background class feat spell weapon armor shield equipment rune condition action; do
+            grep -q "case \"$mode\"" app/src/main/java/ru/gran/edge2e/ReferenceCatalogActivity.java
+          done
+          grep -q 'ЯЗЫКИ И LORE' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'КОПИРОВАТЬ JSON ПЕРСОНАЖА' app/src/main/java/ru/gran/edge2e/ReferenceMoreActivity.java
+          grep -q 'РУНЫ' app/src/main/java/ru/gran/edge2e/ReferenceItemActivity.java
+          grep -q 'СПОСОБНОСТИ ФАМИЛЬЯРА' app/src/main/java/ru/gran/edge2e/ReferenceCompanionActivity.java
+          python3 - <<'PY'
+          import json, sqlite3
+          source=json.load(open('app/src/main/assets/pf2ru_source.json',encoding='utf-8'))
+          assert source['name']=='PF2.RU'
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          rows=db.execute('select count(*) from rules').fetchone()[0]
+          ru=json.load(open('app/src/main/assets/ru_names.json',encoding='utf-8'))
+          counts=dict(db.execute('select category,count(*) from rules group by category'))
+          print('rules',rows,'ru names',len(ru),'categories',counts)
+          assert rows > 15000
+          assert len(ru) > 10000
+          assert counts.get('spell',0) > 1500
+          assert counts.get('equipment',0) > 4000
+          assert counts.get('condition',0) > 30
+          assert counts.get('action',0) > 400
+          db.close()
+          PY
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK signature and embedded data
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          mkdir -p ci-tools
+          cp "$(dirname "$APKSIGNER")/lib/apksigner.jar" ci-tools/apksigner.jar
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'assets/ru_names.json'
+          unzip -l "$APK" | grep 'assets/ru_text.json'
+          unzip -l "$APK" | grep 'assets/pf2ru_source.json'
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Exercise full reference application on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package ru.gran.gran2e | grep 'versionName=6.0.0'
+
+            adb shell am force-stop ru.gran.gran2e
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.FrontPageActivity
+            sleep 5
+            test -n "$(adb shell pidof ru.gran.gran2e | tr -d '\r')" || { adb logcat -d -v time | tail -n 1200; exit 1; }
+            adb shell uiautomator dump /sdcard/g6-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-front.xml > g6-front.xml 2>/dev/null || true
+            grep -q 'НОВЫЙ ПЕРСОНАЖ' g6-front.xml
+            grep -q 'ОТКРЫТЬ ВСЕ ИНСТРУМЕНТЫ' g6-front.xml
+            adb exec-out screencap -p > gran2e-60-final-front.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceBuildActivity
+            sleep 4
+            adb shell uiautomator dump /sdcard/g6-build.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-build.xml > g6-build.xml 2>/dev/null || true
+            grep -q 'СБОРКА' g6-build.xml
+            grep -q 'УРОВНИ' g6-build.xml
+            grep -q 'ОСНОВА ПЕРСОНАЖА' g6-build.xml
+            grep -q 'РОД' g6-build.xml
+            grep -q 'НАСЛЕДИЕ' g6-build.xml
+            grep -q 'ПРЕДЫСТОРИЯ' g6-build.xml
+            grep -q 'КЛАСС' g6-build.xml
+            adb exec-out screencap -p > gran2e-60-final-build.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceMoreActivity
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-more.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-more.xml > g6-more.xml 2>/dev/null || true
+            grep -q 'БИБЛИОТЕКА И ВЫБОРЫ' g6-more.xml
+            grep -q 'ЯЗЫКИ И LORE' g6-more.xml
+            grep -q 'КОПИРОВАТЬ JSON ПЕРСОНАЖА' g6-more.xml
+            adb exec-out screencap -p > gran2e-60-final-more.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode ancestry --ei maxLevel 20
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-ancestry.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-ancestry.xml > g6-ancestry.xml 2>/dev/null || true
+            grep -q 'РОД' g6-ancestry.xml
+            grep -q 'Показано:' g6-ancestry.xml
+            adb exec-out screencap -p > gran2e-60-final-ancestry.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode weapon --ei maxLevel 20
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-weapons.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-weapons.xml > g6-weapons.xml 2>/dev/null || true
+            grep -q 'ОРУЖИЕ' g6-weapons.xml
+            grep -q 'Показано:' g6-weapons.xml
+            adb exec-out screencap -p > gran2e-60-final-weapons.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCatalogActivity --es mode spell --ei maxLevel 10
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-spells.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-spells.xml > g6-spells.xml 2>/dev/null || true
+            grep -q 'ЗАКЛИНАНИЯ' g6-spells.xml
+            grep -q 'Показано:' g6-spells.xml
+            adb exec-out screencap -p > gran2e-60-final-spells.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceItemActivity --es itemId 8V4mgecGASsQ7fjl
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-item.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-item.xml > g6-item.xml 2>/dev/null || true
+            grep -q 'ОРУЖИЕ' g6-item.xml
+            grep -q 'РУНЫ' g6-item.xml
+            grep -q 'Руна мощи' g6-item.xml
+            adb exec-out screencap -p > gran2e-60-final-item.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferenceCompanionActivity --es companionId missing-test-id
+            sleep 2
+            adb shell uiautomator dump /sdcard/g6-companion.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-companion.xml > g6-companion.xml 2>/dev/null || true
+            grep -q 'Спутник не найден' g6-companion.xml
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen character
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-play.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-play.xml > g6-play.xml 2>/dev/null || true
+            grep -q 'ПЕРСОНАЖ' g6-play.xml
+            grep -q 'АТАКИ' g6-play.xml
+            grep -q 'ЗАЩИТА' g6-play.xml
+            grep -q 'НАВЫКИ' g6-play.xml
+            grep -q 'ФИТЫ' g6-play.xml
+            grep -q 'ЗАКЛИНАНИЯ' g6-play.xml
+            grep -q 'СНАРЯЖЕНИЕ' g6-play.xml
+            grep -q 'ПИТОМЦЫ' g6-play.xml
+            grep -q 'ЭФФЕКТЫ' g6-play.xml
+            adb exec-out screencap -p > gran2e-60-final-play.png
+
+            adb shell am start -n ru.gran.gran2e/ru.gran.edge2e.ReferencePlayActivity --es screen gear
+            sleep 3
+            adb shell uiautomator dump /sdcard/g6-gear.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/g6-gear.xml > g6-gear.xml 2>/dev/null || true
+            grep -q 'СНАРЯЖЕНИЕ' g6-gear.xml
+            grep -q 'ОСНОВНОЙ ИНВЕНТАРЬ' g6-gear.xml
+            adb exec-out screencap -p > gran2e-60-final-gear.png
+
+      - name: Upload final Gran 2e 6.0 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gran2e-6.0.0-full-reference-final
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            gran2e-60-final-*.png
+            g6-*.xml
+            ci-tools/apksigner.jar
+          if-no-files-found: error
+          retention-days: 30
