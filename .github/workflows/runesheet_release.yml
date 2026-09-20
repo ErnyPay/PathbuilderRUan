@@ -1,0 +1,141 @@
+name: RuneSheet RU 7.0 source release
+
+on:
+  push:
+    branches: [ runesheet-2.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Generate rules, Russian layer and final RuneSheet sources
+        run: |
+          python3 -m py_compile scripts/*.py
+          python3 scripts/build_rules.py
+          python3 scripts/finalize_rules.py
+          python3 scripts/enrich_runtime.py
+          python3 scripts/inject_ability_choices.py
+          python3 scripts/inject_rule_constraints.py
+          python3 scripts/apply_ru_dictionary.py
+          python3 scripts/extend_runtime_2_0.py
+          python3 scripts/spell_rules_2_0.py
+          python3 scripts/knowledge_data_3_3.py
+          python3 scripts/inventory_data_3_4.py
+          python3 scripts/prepare_2_0.py
+          python3 scripts/prepare_3_0.py
+          python3 scripts/runes_3_0.py
+          python3 scripts/combat_3_1.py
+          python3 scripts/spellcasting_3_2.py
+          python3 scripts/knowledge_3_3.py
+          python3 scripts/inventory_3_4.py
+          python3 scripts/frontpage_4_0.py
+          python3 scripts/build_wizard_4_1.py
+          python3 scripts/reference_play_4_2.py
+          python3 scripts/pf2ru_3_5.py
+          python3 scripts/reference_shell_5_0.py
+          python3 scripts/reference_full_6_0.py
+          python3 scripts/runesheet_finalize.py
+
+      - name: Verify RuneSheet product and new classes
+        run: |
+          grep -q "applicationId 'com.pf2ebuilder.zz.producty'" app/build.gradle
+          grep -q "versionName '7.0.0-runesheet'" app/build.gradle
+          grep -q 'android:label="RuneSheet RU"' app/src/main/AndroidManifest.xml
+          grep -q 'ИМПОРТ ИЗ PATHBUILDER' app/src/main/java/ru/gran/edge2e/FrontPageActivity.java
+          grep -q 'putCore("Necromancer", "Некромант")' app/src/main/java/ru/gran/edge2e/RuNames.java
+          grep -q 'putCore("Runesmith", "Рунотворец")' app/src/main/java/ru/gran/edge2e/RuNames.java
+          python3 - <<'PY'
+          import sqlite3
+          db=sqlite3.connect('app/src/main/assets/rules.db')
+          classes={r[0] for r in db.execute("select name from rules where category='class'")}
+          print('class count',len(classes))
+          print('Necromancer', 'Necromancer' in classes)
+          print('Runesmith', 'Runesmith' in classes)
+          assert 'Necromancer' in classes
+          assert 'Runesmith' in classes
+          assert 'Commander' in classes
+          assert 'Guardian' in classes
+          db.close()
+          PY
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK signature and content
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          unzip -l "$APK" | grep 'assets/rules.db'
+          unzip -l "$APK" | grep 'drawable/runesheet_icon.webp'
+
+      - name: Enable KVM
+        run: if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Smoke test RuneSheet on Android 35
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.pf2ebuilder.zz.producty
+            adb shell am start -n com.pf2ebuilder.zz.producty/ru.gran.edge2e.FrontPageActivity
+            sleep 5
+            test -n "$(adb shell pidof com.pf2ebuilder.zz.producty | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/runesheet-front.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/runesheet-front.xml > runesheet-front.xml 2>/dev/null || true
+            grep -q 'RUNESHEET RU' runesheet-front.xml
+            grep -q 'ИМПОРТ ИЗ PATHBUILDER' runesheet-front.xml
+            adb exec-out screencap -p > runesheet-front.png
+
+            adb shell am start -n com.pf2ebuilder.zz.producty/ru.gran.edge2e.ReferenceCatalogActivity --es mode class --ei maxLevel 20
+            sleep 4
+            test -n "$(adb shell pidof com.pf2ebuilder.zz.producty | tr -d '\r')"
+            adb shell uiautomator dump /sdcard/runesheet-classes.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/runesheet-classes.xml > runesheet-classes.xml 2>/dev/null || true
+            grep -q 'Некромант' runesheet-classes.xml
+            grep -q 'Рунотворец' runesheet-classes.xml
+            adb exec-out screencap -p > runesheet-classes.png
+
+            if adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*Process: com.pf2ebuilder.zz.producty'; then
+              echo 'Runtime crash detected'
+              exit 1
+            fi
+
+      - name: Upload RuneSheet APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuneSheet-RU-7.0.0-source-preview
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            runesheet-front.png
+            runesheet-classes.png
+            runesheet-front.xml
+            runesheet-classes.xml
+          if-no-files-found: error
+          retention-days: 30
