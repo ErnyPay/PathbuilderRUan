@@ -6,17 +6,14 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.List;
 
@@ -42,13 +39,6 @@ public final class FrontPageActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(HEADER_DARK);
         setContentView(shell());
-        handleIncomingIntent(getIntent());
-    }
-
-    @Override protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        handleIncomingIntent(intent);
     }
 
     @Override protected void onResume() {
@@ -65,8 +55,8 @@ public final class FrontPageActivity extends Activity {
         LinearLayout top = column();
         top.setPadding(dp(18), dp(16), dp(18), dp(13));
         top.setBackgroundColor(HEADER);
-        TextView title = text("RUNESHEET RU", 27, true); title.setTextColor(Color.WHITE); top.addView(title);
-        TextView subtitle = text("PATHFINDER 2e • ПЕРСОНАЖИ • СБОРКА • ИГРА", 12, true); subtitle.setTextColor(Color.rgb(242, 211, 183)); top.addView(subtitle);
+        TextView title = text("ГРАНЬ 2e", 27, true); title.setTextColor(Color.WHITE); top.addView(title);
+        TextView subtitle = text("ПЕРСОНАЖИ • СБОРКА • ИГРА", 12, true); subtitle.setTextColor(Color.rgb(242, 211, 183)); top.addView(subtitle);
         root.addView(top, matchWrap());
 
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true);
@@ -88,9 +78,6 @@ public final class FrontPageActivity extends Activity {
             startActivity(new Intent(this, MainActivityV3.class));
         });
         start.addView(create, matchWrap(dp(3)));
-        Button importPb = button("ИМПОРТ ИЗ PATHBUILDER");
-        importPb.setOnClickListener(v -> promptPathbuilderImport());
-        start.addView(importPb, matchWrap(dp(3)));
 
         String active = CharacterProfiles.activeId(this);
         if (active != null && !active.isEmpty()) {
@@ -151,54 +138,6 @@ public final class FrontPageActivity extends Activity {
             return true;
         });
         return card;
-    }
-
-    private void promptPathbuilderImport() {
-        EditText input = new EditText(this);
-        input.setHint("https://pathbuilder2e.com/launch.html?build=...");
-        input.setSingleLine(true);
-        new AlertDialog.Builder(this)
-                .setTitle("Импорт Pathbuilder")
-                .setMessage("Вставь полную ссылку «Поделиться персонажем» или только Build ID.")
-                .setView(input)
-                .setNegativeButton("Отмена", null)
-                .setPositiveButton("Импортировать", (d, w) -> importPathbuilder(input.getText().toString()))
-                .show();
-    }
-
-    private void handleIncomingIntent(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
-        Uri data = intent.getData();
-        if (data == null || data.getHost() == null || !data.getHost().toLowerCase().contains("pathbuilder2e.com")) return;
-        String value = data.toString();
-        if (!PathbuilderImport.buildId(value).isEmpty()) importPathbuilder(value);
-    }
-
-    private void importPathbuilder(String value) {
-        String id = PathbuilderImport.buildId(value);
-        if (id.isEmpty()) {
-            Toast.makeText(this, "Не найден Build ID", Toast.LENGTH_LONG).show();
-            return;
-        }
-        Toast.makeText(this, "Загрузка персонажа " + id + "…", Toast.LENGTH_SHORT).show();
-        new Thread(() -> {
-            try {
-                CharacterState imported = PathbuilderImport.fetch(this, value);
-                runOnUiThread(() -> {
-                    CharacterProfiles.createNew(this);
-                    imported.save(this);
-                    CharacterProfiles.saveCurrent(this);
-                    Toast.makeText(this, "Персонаж импортирован", Toast.LENGTH_SHORT).show();
-                    startActivity(new Intent(this, MainActivityV3.class));
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> new AlertDialog.Builder(this)
-                        .setTitle("Не удалось импортировать")
-                        .setMessage(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())
-                        .setPositiveButton("Закрыть", null)
-                        .show());
-            }
-        }).start();
     }
 
     private void openBuild(String id) {
