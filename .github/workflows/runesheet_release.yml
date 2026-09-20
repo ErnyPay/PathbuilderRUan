@@ -122,10 +122,8 @@ jobs:
             # Keep this screen as a runtime navigation smoke-test; UI dumps can omit off-screen rows.
             adb exec-out screencap -p > runesheet-classes.png
 
-            if adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*Process: com.pf2ebuilder.zz.producty'; then
-              echo 'Runtime crash detected'
-              exit 1
-            fi
+            adb logcat -d > runesheet-logcat.txt
+            ! grep -E 'FATAL EXCEPTION|AndroidRuntime.*Process: com.pf2ebuilder.zz.producty' runesheet-logcat.txt
 
       - name: Upload RuneSheet APK
         if: always()
@@ -138,5 +136,6 @@ jobs:
             runesheet-classes.png
             runesheet-front.xml
             runesheet-classes.xml
+            runesheet-logcat.txt
           if-no-files-found: error
           retention-days: 30
