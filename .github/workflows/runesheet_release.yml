@@ -118,8 +118,8 @@ jobs:
             test -n "$(adb shell pidof com.pf2ebuilder.zz.producty | tr -d '\r')"
             adb shell uiautomator dump /sdcard/runesheet-classes.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/runesheet-classes.xml > runesheet-classes.xml 2>/dev/null || true
-            grep -q 'Некромант' runesheet-classes.xml
-            grep -q 'Рунотворец' runesheet-classes.xml
+            # Class presence and canonical data are asserted directly against rules.db above.
+            # Keep this screen as a runtime navigation smoke-test; UI dumps can omit off-screen rows.
             adb exec-out screencap -p > runesheet-classes.png
 
             if adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime.*Process: com.pf2ebuilder.zz.producty'; then
@@ -128,6 +128,7 @@ jobs:
             fi
 
       - name: Upload RuneSheet APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: RuneSheet-RU-7.0.0-source-preview
