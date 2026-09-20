@@ -1,0 +1,182 @@
+name: Legacy RuneSheet factory dex
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ runesheet-2.0 ]
+    paths: [ '.github/workflows/legacy_factory_dex.yml' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Build replacement factory dex
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          rm -rf /tmp/legacyfactory
+          mkdir -p /tmp/legacyfactory/src/com/redrazors/pathbuilder2e/backend/data/managers/managerclasses
+          mkdir -p /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/managers
+          mkdir -p /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data
+          mkdir -p /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/custom
+          mkdir -p /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/classes
+          mkdir -p /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/classesremastered
+
+          cat > /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/managers/ManagerClasses.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data.managers;
+          import java.util.HashMap;
+          public class ManagerClasses {
+            public HashMap getHashMapCustomClassesInformation(){ return null; }
+          }
+          JAVA
+
+          cat > /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/DataControl.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data;
+          import com.redrazors.pathbuilder2e.backend.data.managers.ManagerClasses;
+          public class DataControl { public ManagerClasses managerClasses; }
+          JAVA
+
+          cat > /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/CharacterData.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data;
+          public class CharacterData {
+            public String getClassName(){ return null; }
+            public String getDualClass(){ return null; }
+            public boolean isRemastered(){ return false; }
+          }
+          JAVA
+
+          cat > /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/custom/CustomClassInformation.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data.custom;
+          public class CustomClassInformation {}
+          JAVA
+
+          cat > /tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/classes/ClassTemplate.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data.classes;
+          public class ClassTemplate {}
+          JAVA
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/classes')
+          names=['Alchemist','Animist','Barbarian','Bard','Champion','Cleric','Commander','Druid','Exemplar','Fighter','Guardian','Gunslinger','Inventor','Investigator','Kineticist','Magus','Monk','Necromancer','Oracle','Psychic','Ranger','Rogue','Runesmith','Sorcerer','Summoner','Swashbuckler','Thaumaturge','Witch','Wizard']
+          for n in names:
+              (p/f'Class{n}.java').write_text(f'package com.redrazors.pathbuilder2e.backend.data.classes; public class Class{n} extends ClassTemplate {{ public Class{n}(){{}} }}\n')
+          (p/'ClassCustom.java').write_text('package com.redrazors.pathbuilder2e.backend.data.classes; import com.redrazors.pathbuilder2e.backend.data.custom.CustomClassInformation; public class ClassCustom extends ClassTemplate { public ClassCustom(CustomClassInformation i){} }\n')
+          (p/'DualClass.java').write_text('package com.redrazors.pathbuilder2e.backend.data.classes; public class DualClass extends ClassTemplate { public DualClass(ClassTemplate a, ClassTemplate b){} }\n')
+          q=Path('/tmp/legacyfactory/stubs/com/redrazors/pathbuilder2e/backend/data/classesremastered')
+          names=['Alchemist','Barbarian','Bard','Champion','Cleric','Druid','Fighter','Gunslinger','Investigator','Monk','Oracle','Ranger','Rogue','Sorcerer','Swashbuckler','Witch','Wizard']
+          for n in names:
+              (q/f'Class{n}Remastered.java').write_text(f'package com.redrazors.pathbuilder2e.backend.data.classesremastered; import com.redrazors.pathbuilder2e.backend.data.classes.ClassTemplate; public class Class{n}Remastered extends ClassTemplate {{ public Class{n}Remastered(){{}} }}\n')
+          PY
+
+          cat > /tmp/legacyfactory/src/com/redrazors/pathbuilder2e/backend/data/managers/managerclasses/ClassTemplateFactory.java <<'JAVA'
+          package com.redrazors.pathbuilder2e.backend.data.managers.managerclasses;
+
+          import com.redrazors.pathbuilder2e.backend.data.CharacterData;
+          import com.redrazors.pathbuilder2e.backend.data.DataControl;
+          import com.redrazors.pathbuilder2e.backend.data.classes.*;
+          import com.redrazors.pathbuilder2e.backend.data.classesremastered.*;
+          import com.redrazors.pathbuilder2e.backend.data.custom.CustomClassInformation;
+          import java.util.HashMap;
+
+          public final class ClassTemplateFactory {
+            public static final ClassTemplateFactory INSTANCE = new ClassTemplateFactory();
+            private ClassTemplateFactory() {}
+
+            private final ClassTemplate getClassTemplate(DataControl dataControl, String className, CharacterData characterData) {
+              HashMap custom = dataControl.managerClasses.getHashMapCustomClassesInformation();
+              if (custom != null && custom.containsKey(className)) {
+                return new ClassCustom((CustomClassInformation) custom.get(className));
+              }
+
+              if (characterData.isRemastered()) {
+                switch (className) {
+                  case "Alchemist": return new ClassAlchemistRemastered();
+                  case "Barbarian": return new ClassBarbarianRemastered();
+                  case "Bard": return new ClassBardRemastered();
+                  case "Champion": return new ClassChampionRemastered();
+                  case "Cleric": return new ClassClericRemastered();
+                  case "Druid": return new ClassDruidRemastered();
+                  case "Fighter": return new ClassFighterRemastered();
+                  case "Gunslinger": return new ClassGunslingerRemastered();
+                  case "Investigator": return new ClassInvestigatorRemastered();
+                  case "Monk": return new ClassMonkRemastered();
+                  case "Oracle": return new ClassOracleRemastered();
+                  case "Ranger": return new ClassRangerRemastered();
+                  case "Rogue": return new ClassRogueRemastered();
+                  case "Sorcerer": return new ClassSorcererRemastered();
+                  case "Swashbuckler": return new ClassSwashbucklerRemastered();
+                  case "Witch": return new ClassWitchRemastered();
+                  case "Wizard": return new ClassWizardRemastered();
+                }
+              }
+
+              switch (className) {
+                case "Alchemist": return new ClassAlchemist();
+                case "Animist": return new ClassAnimist();
+                case "Barbarian": return new ClassBarbarian();
+                case "Bard": return new ClassBard();
+                case "Champion": return new ClassChampion();
+                case "Cleric": return new ClassCleric();
+                case "Commander": return new ClassCommander();
+                case "Druid": return new ClassDruid();
+                case "Exemplar": return new ClassExemplar();
+                case "Fighter": return new ClassFighter();
+                case "Guardian": return new ClassGuardian();
+                case "Gunslinger": return new ClassGunslinger();
+                case "Inventor": return new ClassInventor();
+                case "Investigator": return new ClassInvestigator();
+                case "Kineticist": return new ClassKineticist();
+                case "Magus": return new ClassMagus();
+                case "Monk": return new ClassMonk();
+                case "Necromancer": return new ClassNecromancer();
+                case "Oracle": return new ClassOracle();
+                case "Psychic": return new ClassPsychic();
+                case "Ranger": return new ClassRanger();
+                case "Rogue": return new ClassRogue();
+                case "Runesmith": return new ClassRunesmith();
+                case "Sorcerer": return new ClassSorcerer();
+                case "Summoner": return new ClassSummoner();
+                case "Swashbuckler": return new ClassSwashbuckler();
+                case "Thaumaturge": return new ClassThaumaturge();
+                case "Witch": return new ClassWitch();
+                case "Wizard": return new ClassWizard();
+                default: return new ClassFighter();
+              }
+            }
+
+            public final ClassTemplate getClassTemplate(DataControl dataControl, CharacterData characterData) {
+              String main = characterData.getClassName();
+              String dual = characterData.getDualClass();
+              if (dual != null) {
+                return new DualClass(getClassTemplate(dataControl, main, characterData), getClassTemplate(dataControl, dual, characterData));
+              }
+              return getClassTemplate(dataControl, main, characterData);
+            }
+          }
+          JAVA
+
+          mkdir -p /tmp/legacyfactory/stubclasses /tmp/legacyfactory/factoryclasses /tmp/legacyfactory/out
+          javac -source 8 -target 8 -d /tmp/legacyfactory/stubclasses $(find /tmp/legacyfactory/stubs -name '*.java')
+          jar cf /tmp/legacyfactory/stubs.jar -C /tmp/legacyfactory/stubclasses .
+          javac -source 8 -target 8 -cp /tmp/legacyfactory/stubs.jar -d /tmp/legacyfactory/factoryclasses $(find /tmp/legacyfactory/src -name '*.java')
+          jar cf /tmp/legacyfactory/factory.jar -C /tmp/legacyfactory/factoryclasses .
+          "$ANDROID_HOME/build-tools/35.0.0/d8" --min-api 23 --lib "$ANDROID_HOME/platforms/android-35/android.jar" --classpath /tmp/legacyfactory/stubs.jar --output /tmp/legacyfactory/out /tmp/legacyfactory/factory.jar
+          cp /tmp/legacyfactory/out/classes.dex legacy-class-template-factory.dex
+          sha256sum legacy-class-template-factory.dex
+
+      - name: Upload factory dex
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-class-template-factory-dex
+          path: legacy-class-template-factory.dex
+          if-no-files-found: error
